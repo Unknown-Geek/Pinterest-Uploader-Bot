@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pinterest Auto-Publisher</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --pinterest-red: #E60023;
+            --pinterest-dark-red: #AD081B;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .card {
+            border: none;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            backdrop-filter: blur(10px);
+            background: rgba(255, 255, 255, 0.95);
+        }
+        
+        .card-header {
+            background: linear-gradient(135deg, var(--pinterest-red), var(--pinterest-dark-red));
+            color: white;
+            border-radius: 20px 20px 0 0 !important;
+            text-align: center;
+            padding: 30px 20px;
+        }
+        
+        .card-header h1 {
+            margin: 0;
+            font-weight: 600;
+            font-size: 2.2rem;
+        }
+        
+        .card-header p {
+            margin: 10px 0 0 0;
+            opacity: 0.9;
+            font-size: 1.1rem;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-label {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+        }
+        
+        .form-control {
+            border: 2px solid #e9ecef;
+            border-radius: 12px;
+            padding: 12px 16px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+        
+        .form-control:focus {
+            border-color: var(--pinterest-red);
+            box-shadow: 0 0 0 0.2rem rgba(230, 0, 35, 0.25);
+        }
+        
+        .btn-pinterest {
+            background: linear-gradient(135deg, var(--pinterest-red), var(--pinterest-dark-red));
+            border: none;
+            border-radius: 12px;
+            padding: 15px 30px;
+            font-size: 16px;
+            font-weight: 600;
+            color: white;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(230, 0, 35, 0.3);
+        }
+        
+        .btn-pinterest:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 25px rgba(230, 0, 35, 0.4);
+            color: white;
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+            border: none;
+            border-radius: 12px;
+            padding: 10px 20px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+        
+        .btn-secondary:hover {
+            transform: translateY(-1px);
+            background: #5a6268;
+        }
+        
+        .file-upload-wrapper {
+            position: relative;
+            border: 3px dashed #ddd;
+            border-radius: 12px;
+            padding: 40px 20px;
+            text-align: center;
+            transition: all 0.3s ease;
+            background: #f8f9fa;
+        }
+        
+        .file-upload-wrapper:hover {
+            border-color: var(--pinterest-red);
+            background: rgba(230, 0, 35, 0.05);
+        }
+        
+        .file-upload-wrapper.dragover {
+            border-color: var(--pinterest-red);
+            background: rgba(230, 0, 35, 0.1);
+        }
+        
+        .file-upload-input {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+        }
+        
+        .file-upload-text {
+            pointer-events: none;
+        }
+        
+        .file-upload-icon {
+            font-size: 48px;
+            color: #ddd;
+            margin-bottom: 15px;
+        }
+        
+        .progress {
+            height: 25px;
+            border-radius: 12px;
+            background: #e9ecef;
+            overflow: hidden;
+        }
+        
+        .progress-bar {
+            background: linear-gradient(135deg, var(--pinterest-red), var(--pinterest-dark-red));
+            transition: width 0.3s ease;
+        }
+        
+        .alert {
+            border: none;
+            border-radius: 12px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        
+        .alert-success {
+            background: linear-gradient(135deg, #28a745, #20c997);
+            color: white;
+        }
+        
+        .alert-danger {
+            background: linear-gradient(135deg, #dc3545, #e74c3c);
+            color: white;
+        }
+        
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+        
+        .loading-content {
+            text-align: center;
+            color: white;
+        }
+        
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(255, 255, 255, 0.3);
+            border-top: 4px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .feature-list {
+            list-style: none;
+            padding: 0;
+        }
+        
+        .feature-list li {
+            padding: 8px 0;
+            color: #666;
+        }
+        
+        .feature-list li::before {
+            content: "\f00c";
+            font-family: "Font Awesome 6 Free";
+            font-weight: 900;
+            color: #28a745;
+            margin-right: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card">
+            <div class="card-header">
+                <h1><i class="fab fa-pinterest"></i> Pinterest Auto-Publisher</h1>
+                <p>Upload your pins automatically with ease</p>
+            </div>
+            <div class="card-body p-4">
+                <form id="uploadForm" enctype="multipart/form-data">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="email" class="form-label">
+                                    <i class="fas fa-envelope"></i> Pinterest Email
+                                </label>
+                                <input type="email" class="form-control" id="email" name="email" required 
+                                       placeholder="your@email.com">
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-group">
+                                <label for="password" class="form-label">
+                                    <i class="fas fa-lock"></i> Pinterest Password
+                                </label>
+                                <input type="password" class="form-control" id="password" name="password" required 
+                                       placeholder="Your password">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-12">
+                            <div class="form-group">
+                                <label class="form-label">
+                                    <i class="fas fa-image"></i> Select Image
+                                </label>
+                                <div class="file-upload-wrapper" id="fileUploadWrapper">
+                                    <input type="file" class="file-upload-input" id="image" name="image" 
+                                           accept="image/*" required>
+                                    <div class="file-upload-text">
+                                        <div class="file-upload-icon">
+                                            <i class="fas fa-cloud-upload-alt"></i>
+                                        </div>
+                                        <h5>Drop your image here or click to browse</h5>
+                                        <p class="text-muted">Supports PNG, JPG, JPEG, GIF, WEBP (Max 16MB)</p>
+                                        <div id="selectedFile" class="mt-2"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-8">
+                            <div class="form-group">
+                                <label for="title" class="form-label">
+                                    <i class="fas fa-heading"></i> Pin Title
+                                </label>
+                                <input type="text" class="form-control" id="title" name="title" required 
+                                       placeholder="Give your pin an engaging title"
+                                       maxlength="100">
+                                <small class="text-muted">Maximum 100 characters</small>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="form-group">
+                                <label for="board_name" class="form-label">
+                                    <i class="fas fa-folder"></i> Board Name
+                                </label>
+                                <input type="text" class="form-control" id="board_name" name="board_name" required 
+                                       placeholder="e.g., Wallpapers">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="description" class="form-label">
+                            <i class="fas fa-align-left"></i> Description
+                        </label>
+                        <textarea class="form-control" id="description" name="description" rows="4" required 
+                                  placeholder="Write a compelling description for your pin..."
+                                  maxlength="500"></textarea>
+                        <small class="text-muted">Maximum 500 characters</small>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="link_url" class="form-label">
+                            <i class="fas fa-link"></i> Destination Link (Optional)
+                        </label>
+                        <input type="url" class="form-control" id="link_url" name="link_url" 
+                               placeholder="https://example.com">
+                        <small class="text-muted">Where should this pin lead when clicked?</small>
+                    </div>
+                    
+                    <div class="row mt-4">
+                        <div class="col-md-6">
+                            <button type="button" class="btn btn-secondary w-100 mb-2" id="testLoginBtn">
+                                <i class="fas fa-user-check"></i> Test Login
+                            </button>
+                        </div>
+                        <div class="col-md-6">
+                            <button type="submit" class="btn btn-pinterest w-100" id="uploadBtn">
+                                <i class="fas fa-upload"></i> Upload Pin
+                            </button>
+                        </div>
+                    </div>
+                </form>
+                
+                <div id="result" class="mt-4"></div>
+                
+                <!-- Features Section -->
+                <div class="mt-5 p-4 bg-light rounded">
+                    <h5><i class="fas fa-star text-warning"></i> Features</h5>
+                    <ul class="feature-list">
+                        <li>Automated Pinterest login and pin creation</li>
+                        <li>Support for multiple image formats</li>
+                        <li>Automatic title, description, and link setting</li>
+                        <li>Smart board selection</li>
+                        <li>Human-like interaction patterns</li>
+                        <li>Error handling and retry mechanisms</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="loading-overlay" style="display: none;">
+        <div class="loading-content">
+            <div class="spinner"></div>
+            <h4>Processing your pin...</h4>
+            <p id="loadingMessage">Logging into Pinterest...</p>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.0/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // File upload handling
+        const fileInput = document.getElementById('image');
+        const fileWrapper = document.getElementById('fileUploadWrapper');
+        const selectedFileDiv = document.getElementById('selectedFile');
+        
+        fileInput.addEventListener('change', handleFileSelect);
+        
+        // Drag and drop
+        fileWrapper.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            fileWrapper.classList.add('dragover');
+        });
+        
+        fileWrapper.addEventListener('dragleave', () => {
+            fileWrapper.classList.remove('dragover');
+        });
+        
+        fileWrapper.addEventListener('drop', (e) => {
+            e.preventDefault();
+            fileWrapper.classList.remove('dragover');
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                fileInput.files = files;
+                handleFileSelect();
+            }
+        });
+        
+        function handleFileSelect() {
+            const file = fileInput.files[0];
+            if (file) {
+                const fileSize = (file.size / 1024 / 1024).toFixed(2);
+                selectedFileDiv.innerHTML = `
+                    <div class="alert alert-info p-2 mb-0">
+                        <i class="fas fa-file-image"></i> 
+                        <strong>${file.name}</strong> (${fileSize} MB)
+                    </div>
+                `;
+            }
+        }
+        
+        // Test login functionality
+        document.getElementById('testLoginBtn').addEventListener('click', function() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            
+            if (!email || !password) {
+                showResult('Please enter email and password first.', 'danger');
+                return;
+            }
+            
+            showLoading('Testing login credentials...');
+            
+            const formData = new FormData();
+            formData.append('email', email);
+            formData.append('password', password);
+            
+            fetch('/test_login', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                hideLoading();
+                if (data.success) {
+                    showResult(data.message, 'success');
+                } else {
+                    showResult(data.message, 'danger');
+                }
+            })
+            .catch(error => {
+                hideLoading();
+                showResult('Error testing login: ' + error.message, 'danger');
+            });
+        });
+        
+        // Form submission
+        document.getElementById('uploadForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const formData = new FormData(this);
+            
+            // Validate form
+            if (!validateForm()) {
+                return;
+            }
+            
+            showLoading('Uploading your pin to Pinterest...');
+            updateLoadingMessage('Logging into Pinterest...');
+            
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                hideLoading();
+                if (data.success) {
+                    showResult(data.message, 'success');
+                    if (data.pin_url) {
+                        const resultDiv = document.getElementById('result');
+                        resultDiv.innerHTML += `
+                            <div class="mt-2">
+                                <a href="${data.pin_url}" target="_blank" class="btn btn-outline-primary">
+                                    <i class="fas fa-external-link-alt"></i> View Pin
+                                </a>
+                            </div>
+                        `;
+                    }
+                    // Reset form on success
+                    this.reset();
+                    selectedFileDiv.innerHTML = '';
+                } else {
+                    showResult(data.message, 'danger');
+                }
+            })
+            .catch(error => {
+                hideLoading();
+                showResult('Error uploading pin: ' + error.message, 'danger');
+            });
+        });
+        
+        function validateForm() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const title = document.getElementById('title').value;
+            const description = document.getElementById('description').value;
+            const boardName = document.getElementById('board_name').value;
+            const image = document.getElementById('image').files[0];
+            
+            if (!email || !password || !title || !description || !boardName || !image) {
+                showResult('Please fill in all required fields and select an image.', 'danger');
+                return false;
+            }
+            
+            if (image.size > 16 * 1024 * 1024) {
+                showResult('Image file is too large. Maximum size is 16MB.', 'danger');
+                return false;
+            }
+            
+            return true;
+        }
+        
+        function showLoading(message) {
+            document.getElementById('loadingMessage').textContent = message;
+            document.getElementById('loadingOverlay').style.display = 'flex';
+        }
+        
+        function hideLoading() {
+            document.getElementById('loadingOverlay').style.display = 'none';
+        }
+        
+        function updateLoadingMessage(message) {
+            document.getElementById('loadingMessage').textContent = message;
+        }
+        
+        function showResult(message, type) {
+            const resultDiv = document.getElementById('result');
+            const alertClass = type === 'success' ? 'alert-success' : 'alert-danger';
+            const icon = type === 'success' ? 'fa-check-circle' : 'fa-exclamation-triangle';
+            
+            resultDiv.innerHTML = `
+                <div class="alert ${alertClass}">
+                    <i class="fas ${icon}"></i> ${message}
+                </div>
+            `;
+            
+            resultDiv.scrollIntoView({ behavior: 'smooth' });
+        }
+        
+        // Character counters
+        document.getElementById('title').addEventListener('input', function() {
+            updateCharCounter(this, 100);
+        });
+        
+        document.getElementById('description').addEventListener('input', function() {
+            updateCharCounter(this, 500);
+        });
+        
+        function updateCharCounter(element, maxLength) {
+            const current = element.value.length;
+            const remaining = maxLength - current;
+            const small = element.nextElementSibling;
+            
+            if (remaining < 20) {
+                small.style.color = '#dc3545';
+            } else {
+                small.style.color = '#6c757d';
+            }
+            
+            small.textContent = `${remaining} characters remaining`;
+        }
+    </script>
+</body>
+</html>
