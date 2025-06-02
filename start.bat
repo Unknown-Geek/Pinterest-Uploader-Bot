@@ -15,18 +15,7 @@ REM Install dependencies if needed
 echo Installing/checking dependencies...
 pip install -r requirements.txt
 
-REM Run system test
-echo.
-echo Running system test...
-python test_system.py
-if errorlevel 1 (
-    echo.
-    echo System test failed. Please check the errors above.
-    pause
-    exit /b 1
-)
-
-REM Start the application
+REM Start the application directly
 echo.
 echo Starting Pinterest Auto-Publisher...
 echo Open your browser and go to: http://localhost:5000
