@@ -55,21 +55,50 @@ class PinterestAutomation:
         chrome_options.add_argument('--disable-renderer-backgrounding')
         chrome_options.add_argument('--disable-features=TranslateUI')
         chrome_options.add_argument('--disable-ipc-flooding-protection')
+        chrome_options.add_argument('--user-data-dir=/tmp/chrome_user_data')  # Unique user data directory
+        
+        # Set Chrome binary location to use Google Chrome
+        chrome_options.binary_location = '/usr/bin/google-chrome'
         
         try:
-            # Use chromium-driver for Hugging Face Spaces
+            # Use local ChromeDriver from drivers folder
             from selenium.webdriver.chrome.service import Service
             
-            # Use chromium-driver path for Hugging Face Spaces
-            service = Service('/usr/bin/chromium-driver')
+            # Get the absolute path to the ChromeDriver in the project directory
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            chromedriver_path = os.path.join(current_dir, 'drivers', 'chromedriver')
+            
+            # Fallback paths for different environments
+            fallback_paths = [
+                '/usr/bin/chromedriver',
+                '/usr/bin/chromium-driver',
+                '/usr/local/bin/chromedriver'
+            ]
+            
+            # Check if local ChromeDriver exists
+            if os.path.exists(chromedriver_path) and os.access(chromedriver_path, os.X_OK):
+                self.logger.info(f"Using local ChromeDriver: {chromedriver_path}")
+                service = Service(chromedriver_path)
+            else:
+                # Try fallback paths
+                service = None
+                for fallback_path in fallback_paths:
+                    if os.path.exists(fallback_path) and os.access(fallback_path, os.X_OK):
+                        self.logger.info(f"Using fallback ChromeDriver: {fallback_path}")
+                        service = Service(fallback_path)
+                        break
+                
+                if service is None:
+                    raise Exception(f"ChromeDriver not found. Please ensure chromedriver is in {chromedriver_path} or in system PATH")
+            
             self.driver = webdriver.Chrome(service=service, options=chrome_options)
                 
             self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
             self.wait = WebDriverWait(self.driver, 20)
             return True
         except Exception as e:
-            self.logger.error(f"Failed to setup Chromium driver: {str(e)}")
-            self.logger.error("Make sure chromium-driver is installed in /usr/bin/chromium-driver")
+            self.logger.error(f"Failed to setup ChromeDriver: {str(e)}")
+            self.logger.error(f"Make sure chromedriver is installed in {os.path.join(os.path.dirname(os.path.abspath(__file__)), 'drivers', 'chromedriver')}")
             return False
     
     def _human_delay(self, min_delay=1, max_delay=3):
