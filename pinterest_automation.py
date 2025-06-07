@@ -10,6 +10,10 @@ import time
 import os
 import logging
 import random
+import time
+import os
+import logging
+import random
 
 class PinterestAutomation:    
     def __init__(self, headless=False, fast_typing=True):

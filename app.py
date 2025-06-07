@@ -1,227 +1,259 @@
-from flask import Flask, request, render_template, jsonify, flash, redirect, url_for
-import os
+import gradio as gr
 import logging
-from werkzeug.utils import secure_filename
+import os
+import tempfile
+from PIL import Image
 from pinterest_automation import PinterestAutomation
-from selenium.webdriver.common.by import By
-import json
-from datetime import datetime
 
-# Configure logging
+# Setup logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.FileHandler('pinterest_bot.log'),
         logging.StreamHandler()
     ]
 )
 
-app = Flask(__name__)
-app.secret_key = 'your-secret-key-change-this'
-app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+logger = logging.getLogger(__name__)
 
-# Create upload directory if it doesn't exist
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-
-# Allowed file extensions
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
-
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
-@app.route('/')
-def index():
-    return render_template('index.html')
-
-@app.route('/upload', methods=['POST'])
-def upload_pin():
+def upload_to_pinterest(email, password, image, title, description, board_name, link_url=""):
+    """
+    Upload a pin to Pinterest using the automation bot
+    
+    Args:
+        email (str): Pinterest email
+        password (str): Pinterest password
+        image (PIL.Image): The image to upload
+        title (str): Pin title
+        description (str): Pin description
+        board_name (str): Board name to save the pin to
+        link_url (str): Optional destination link
+    
+    Returns:
+        tuple: (success_message, log_output)
+    """
     try:
-        # Get form data
-        email = request.form.get('email')
-        password = request.form.get('password')
-        title = request.form.get('title')
-        description = request.form.get('description')
-        board_name = request.form.get('board_name')
-        link_url = request.form.get('link_url', '')
+        logger.info("Starting Pinterest upload process...")
         
-        # Validate required fields
-        if not all([email, password, title, description, board_name]):
-            return jsonify({'success': False, 'message': 'All required fields must be filled'})
+        # Validate inputs
+        if not email or not password:
+            return "❌ Error: Email and password are required", "Missing credentials"
+            
+        if not image:
+            return "❌ Error: Image is required", "No image provided"
+            
+        if not title or not description or not board_name:
+            return "❌ Error: Title, description, and board name are required", "Missing required fields"
         
-        # Check if file was uploaded
-        if 'image' not in request.files:
-            return jsonify({'success': False, 'message': 'No image file uploaded'})
+        # Save the uploaded image to a temporary file
+        with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as temp_file:
+            image.save(temp_file.name, 'PNG')
+            temp_image_path = temp_file.name
         
-        file = request.files['image']
-        
-        if file.filename == '':
-            return jsonify({'success': False, 'message': 'No image file selected'})
-        
-        if not allowed_file(file.filename):
-            return jsonify({'success': False, 'message': 'Invalid file type. Allowed: PNG, JPG, JPEG, GIF, WEBP'})
-        
-        # Save uploaded file
-        filename = secure_filename(file.filename)
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f"{timestamp}_{filename}"
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(filepath)
+        logger.info(f"Image saved to temporary file: {temp_image_path}")
         
         # Create Pinterest automation instance
-        pinterest_bot = PinterestAutomation()
+        pinterest_bot = PinterestAutomation(headless=True, fast_typing=True)
         
-        # Upload to Pinterest
+        # Upload the pin
         result = pinterest_bot.upload_pin(
             email=email,
             password=password,
-            image_path=filepath,
+            image_path=temp_image_path,
             title=title,
             description=description,
             board_name=board_name,
-            link_url=link_url
+            link_url=link_url if link_url else None
         )
         
-        # Clean up uploaded file
+        # Clean up temporary file
         try:
-            os.remove(filepath)
-        except:
-            pass
+            os.unlink(temp_image_path)
+            logger.info("Temporary file cleaned up")
+        except Exception as e:
+            logger.warning(f"Failed to clean up temporary file: {e}")
         
+        # Format response
         if result['success']:
-            return jsonify({
-                'success': True, 
-                'message': 'Pin uploaded successfully!',
-                'pin_url': result.get('pin_url', '')
-            })
+            success_msg = f"✅ {result['message']}"
+            if result.get('pin_url'):
+                success_msg += f"\n🔗 Pin URL: {result['pin_url']}"
+            return success_msg, "Upload completed successfully"
         else:
-            return jsonify({
-                'success': False, 
-                'message': f"Upload failed: {result['message']}"
-            })
+            return f"❌ {result['message']}", "Upload failed"
             
     except Exception as e:
-        logging.error(f"Error in upload route: {str(e)}")
-        return jsonify({'success': False, 'message': f'Server error: {str(e)}'})
+        logger.error(f"Error in upload_to_pinterest: {str(e)}")
+        return f"❌ Unexpected error: {str(e)}", f"Exception: {str(e)}"
 
-@app.route('/test_login', methods=['POST'])
-def test_login():
-    try:
-        email = request.form.get('email')
-        password = request.form.get('password')
-        
-        if not email or not password:
-            return jsonify({'success': False, 'message': 'Email and password are required'})
-        
-        pinterest_bot = PinterestAutomation()
-        result = pinterest_bot.test_login(email, password)
-        
-        return jsonify(result)
-        
-    except Exception as e:
-        logging.error(f"Error in test_login route: {str(e)}")
-        return jsonify({'success': False, 'message': f'Server error: {str(e)}'})
+def upload_pin_api(email, password, image, title, description, board_name, link_url=None):
+    # Save uploaded image to a temp file
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_img:
+        temp_img.write(image.read())
+        temp_img_path = temp_img.name
+    
+    bot = PinterestAutomation(headless=True)
+    result = bot.upload_pin(
+        email=email,
+        password=password,
+        image_path=temp_img_path,
+        title=title,
+        description=description,
+        board_name=board_name,
+        link_url=link_url
+    )
+    os.remove(temp_img_path)
+    return result
 
-@app.route('/get_boards', methods=['POST'])
-def get_boards():
-    try:
-        email = request.form.get('email')
-        password = request.form.get('password')
+def create_interface():
+    """Create and configure the Gradio interface"""
+    
+    # Custom CSS for better styling
+    css = """
+    .container {
+        max-width: 800px;
+        margin: 0 auto;
+    }
+    .header {
+        text-align: center;
+        margin-bottom: 2rem;
+    }
+    .success {
+        color: #28a745;
+        font-weight: bold;
+    }
+    .error {
+        color: #dc3545;
+        font-weight: bold;
+    }
+    """
+    
+    with gr.Blocks(css=css, title="Pinterest Auto-Publisher") as interface:
+        gr.HTML("""
+        <div class="header">
+            <h1>🎯 Pinterest Auto-Publisher</h1>
+            <p>Automatically upload pins to Pinterest with AI-powered automation</p>
+        </div>
+        """)
         
-        if not email or not password:
-            return jsonify({'success': False, 'message': 'Email and password are required'})
+        with gr.Row():
+            with gr.Column():
+                gr.Markdown("### 📝 Pinterest Credentials")
+                email = gr.Textbox(
+                    label="Pinterest Email",
+                    placeholder="your-email@example.com",
+                    type="email"
+                )
+                password = gr.Textbox(
+                    label="Pinterest Password",
+                    placeholder="Your Pinterest password",
+                    type="password"
+                )
+                
+                gr.Markdown("### 🖼️ Pin Content")
+                image = gr.Image(
+                    label="Upload Image",
+                    type="pil",
+                    height=300
+                )
+                
+                title = gr.Textbox(
+                    label="Pin Title",
+                    placeholder="Enter a catchy title for your pin",
+                    max_lines=2
+                )
+                
+                description = gr.Textbox(
+                    label="Pin Description",
+                    placeholder="Describe your pin in detail...",
+                    lines=4
+                )
+                
+                board_name = gr.Textbox(
+                    label="Board Name",
+                    placeholder="Name of the board to save the pin to"
+                )
+                
+                link_url = gr.Textbox(
+                    label="Destination Link (Optional)",
+                    placeholder="https://your-website.com",
+                    type="url"
+                )
         
-        pinterest_bot = PinterestAutomation()
-        result = pinterest_bot.get_user_boards(email, password)
+        with gr.Row():
+            upload_btn = gr.Button(
+                "🚀 Upload to Pinterest",
+                variant="primary",
+                size="lg"
+            )
+            clear_btn = gr.Button(
+                "🗑️ Clear Form",
+                variant="secondary"
+            )
         
-        return jsonify(result)
+        with gr.Row():
+            output = gr.Textbox(
+                label="Upload Status",
+                lines=3,
+                interactive=False
+            )
+            logs = gr.Textbox(
+                label="Process Logs",
+                lines=2,
+                interactive=False,
+                visible=False  # Hidden by default
+            )
         
-    except Exception as e:
-        logging.error(f"Error in get_boards route: {str(e)}")
-        return jsonify({'success': False, 'message': f'Server error: {str(e)}'})
+        # Button event handlers
+        upload_btn.click(
+            fn=upload_to_pinterest,
+            inputs=[email, password, image, title, description, board_name, link_url],
+            outputs=[output, logs],
+            show_progress=True
+        )
+        
+        clear_btn.click(
+            fn=lambda: ("", "", None, "", "", "", "", "", ""),
+            outputs=[email, password, image, title, description, board_name, link_url, output, logs]
+        )
+        
+        # Add examples section
+        gr.Markdown("### 📖 Usage Instructions")
+        gr.Markdown("""
+        1. **Enter your Pinterest credentials** (email and password)
+        2. **Upload an image** for your pin (PNG, JPG, etc.)
+        3. **Fill in the pin details**:
+           - Title: A catchy, descriptive title
+           - Description: Detailed description with relevant keywords
+           - Board Name: Exact name of your Pinterest board
+           - Link (Optional): URL where users should go when they click your pin
+        4. **Click "Upload to Pinterest"** and wait for the process to complete
+        
+        **Note**: Make sure your board name matches exactly with your Pinterest board names.
+        """)
+        
+        gr.Markdown("### ⚠️ Important Notes")
+        gr.Markdown("""
+        - This tool uses browser automation to upload pins
+        - Keep your credentials secure - they are only used during the session
+        - The process may take 30-60 seconds to complete
+        - Make sure your Pinterest account has the specified board created
+        - For best results, use high-quality images (recommended: 1000x1500px or 2:3 ratio)
+        """)
+    
+    return interface
 
-@app.route('/debug_fields', methods=['POST'])
-def debug_fields():
-    """Debug route to test field detection on Pinterest"""
-    try:
-        email = request.form.get('email')
-        password = request.form.get('password')
-        
-        if not email or not password:
-            return jsonify({'success': False, 'message': 'Email and password are required'})
-        
-        pinterest_bot = PinterestAutomation()
-        
-        # Login first
-        login_result = pinterest_bot.login(email, password)
-        if not login_result:
-            return jsonify({'success': False, 'message': 'Login failed'})
-        
-        # Go to pin creation page
-        pinterest_bot.driver.get("https://www.pinterest.com/pin-builder/")
-        pinterest_bot._human_delay(3, 5)
-        
-        debug_info = {
-            'description_field': None,
-            'link_field': None,
-            'all_inputs': []
-        }
-        
-        # Test description field
-        try:
-            desc_field = pinterest_bot.driver.find_element(By.CSS_SELECTOR, "textarea[placeholder='Tell everyone what your Pin is about']")
-            debug_info['description_field'] = {
-                'found': True,
-                'visible': desc_field.is_displayed(),
-                'enabled': desc_field.is_enabled(),
-                'placeholder': desc_field.get_attribute('placeholder')
-            }
-        except Exception as e:
-            debug_info['description_field'] = {
-                'found': False,
-                'error': str(e)
-            }
-        
-        # Test link field
-        try:
-            link_field = pinterest_bot.driver.find_element(By.CSS_SELECTOR, "input[placeholder='Add a destination link']")
-            debug_info['link_field'] = {
-                'found': True,
-                'visible': link_field.is_displayed(),
-                'enabled': link_field.is_enabled(),
-                'placeholder': link_field.get_attribute('placeholder')
-            }
-        except Exception as e:
-            debug_info['link_field'] = {
-                'found': False,
-                'error': str(e)
-            }
-        
-        # Get all visible input fields for analysis
-        inputs = pinterest_bot.driver.find_elements(By.CSS_SELECTOR, "input, textarea")
-        for inp in inputs:
-            if inp.is_displayed():
-                debug_info['all_inputs'].append({
-                    'tag': inp.tag_name,
-                    'type': inp.get_attribute('type') or '',
-                    'placeholder': inp.get_attribute('placeholder') or '',
-                    'aria_label': inp.get_attribute('aria-label') or '',
-                    'id': inp.get_attribute('id') or '',
-                    'class': inp.get_attribute('class') or ''
-                })
-        
-        pinterest_bot.close()
-        
-        return jsonify({
-            'success': True,
-            'debug_info': debug_info,
-            'message': 'Field detection completed'
-        })
-        
-    except Exception as e:
-        logging.error(f"Error in debug_fields route: {str(e)}")
-        return jsonify({'success': False, 'message': f'Server error: {str(e)}'})
+# Create the interface
+iface = create_interface()
 
-if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+if __name__ == "__main__":
+    # Launch the app
+    iface.launch(
+        server_name="0.0.0.0",
+        server_port=7860,
+        share=True,
+        debug=False,
+        show_error=True,
+        quiet=False
+    )
