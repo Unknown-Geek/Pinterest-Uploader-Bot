@@ -179,10 +179,6 @@ final_publish_failure_*.png
 uploads/
 temp_uploads/
 
-# ChromeDriver
-chromedriver.exe
-chromedriver
-
 # Config files with sensitive data
 config.py
 .env.local

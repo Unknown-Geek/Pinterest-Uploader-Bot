@@ -2,6 +2,7 @@ import gradio as gr
 import logging
 import os
 import tempfile
+import atexit
 from PIL import Image
 from pinterest_automation import PinterestAutomation
 
@@ -16,6 +17,84 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+# Global Pinterest bot instance for persistent session
+global_pinterest_bot = None
+current_credentials = {"email": None, "password": None}
+
+def get_or_create_pinterest_bot(email, password):
+    """Get existing Pinterest bot or create a new one with login"""
+    global global_pinterest_bot, current_credentials
+    
+    try:
+        # Check if we need to create a new bot or login with different credentials
+        need_new_bot = (
+            global_pinterest_bot is None or 
+            current_credentials["email"] != email or 
+            current_credentials["password"] != password or
+            not hasattr(global_pinterest_bot, 'driver') or
+            global_pinterest_bot.driver is None
+        )
+        
+        if need_new_bot:
+            logger.info("Creating new Pinterest bot session...")
+            
+            # Clean up existing bot if any
+            if global_pinterest_bot:
+                try:
+                    global_pinterest_bot.quit()
+                except:
+                    pass
+            
+            # Create new bot and login
+            global_pinterest_bot = PinterestAutomation(headless=True, fast_typing=True)
+            
+            # Initialize driver
+            if not global_pinterest_bot._setup_driver():
+                raise Exception("Failed to initialize browser driver")
+            
+            # Login to Pinterest
+            if not global_pinterest_bot.login(email, password):
+                raise Exception("Failed to login to Pinterest. Please check your credentials.")
+            
+            # Store current credentials
+            current_credentials["email"] = email
+            current_credentials["password"] = password
+            
+            logger.info("✅ Pinterest bot session created and logged in successfully!")
+        else:
+            logger.info("♻️ Reusing existing Pinterest bot session")
+        
+        return global_pinterest_bot
+        
+    except Exception as e:
+        logger.error(f"Error creating/getting Pinterest bot: {str(e)}")
+        # Clean up on error
+        if global_pinterest_bot:
+            try:
+                global_pinterest_bot.quit()
+            except:
+                pass
+            global_pinterest_bot = None
+        current_credentials = {"email": None, "password": None}
+        raise
+
+def cleanup_pinterest_bot():
+    """Clean up the global Pinterest bot"""
+    global global_pinterest_bot, current_credentials
+    
+    if global_pinterest_bot:
+        try:
+            logger.info("🧹 Cleaning up Pinterest bot session...")
+            global_pinterest_bot.quit()
+        except Exception as e:
+            logger.warning(f"Error during cleanup: {str(e)}")
+        finally:
+            global_pinterest_bot = None
+            current_credentials = {"email": None, "password": None}
+
+# Register cleanup function to run on app shutdown
+atexit.register(cleanup_pinterest_bot)
 
 def upload_to_pinterest(email, password, image, title, description, board_name, link_url=""):
     """
@@ -32,7 +111,6 @@ def upload_to_pinterest(email, password, image, title, description, board_name, 
     Returns:
         tuple: (success_message, log_output)
     """
-    pinterest_bot = None
     temp_image_path = None
     
     try:
@@ -55,13 +133,11 @@ def upload_to_pinterest(email, password, image, title, description, board_name, 
         
         logger.info(f"Image saved to temporary file: {temp_image_path}")
         
-        # Create Pinterest automation instance (using Chromium driver)
-        pinterest_bot = PinterestAutomation(headless=True, fast_typing=True)
+        # Get or create Pinterest automation instance (with persistent session)
+        pinterest_bot = get_or_create_pinterest_bot(email, password)
         
-        # Use the complete upload_pin workflow
-        result = pinterest_bot.upload_pin(
-            email=email,
-            password=password,
+        # Use the upload_pin_with_session method for already logged-in sessions
+        result = pinterest_bot.upload_pin_with_session(
             image_path=temp_image_path,
             title=title,
             description=description,
@@ -90,7 +166,7 @@ def upload_to_pinterest(email, password, image, title, description, board_name, 
             except Exception as e:
                 logger.warning(f"Failed to clean up temporary file: {e}")
         
-        # Pinterest automation handles its own driver cleanup
+        # Note: We don't quit the Pinterest bot here anymore - it stays persistent
 
 def create_interface():
     """Create and configure the Gradio interface"""
