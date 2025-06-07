@@ -68,8 +68,25 @@ class PinterestAutomation:
         user_data_dir = f"/tmp/chrome_user_data_{uuid.uuid4().hex[:8]}"
         chrome_options.add_argument(f'--user-data-dir={user_data_dir}')
         
-        # Set Chrome binary location to use Google Chrome
-        chrome_options.binary_location = '/usr/bin/google-chrome'
+        # Set Chrome binary location - try multiple locations for different environments
+        chrome_binary_paths = [
+            '/usr/bin/chromium-browser',  # Render/Ubuntu default
+            '/usr/bin/google-chrome',     # Standard Google Chrome
+            '/usr/bin/chromium',          # Alternative Chromium
+            '/opt/google/chrome/chrome',  # Another common location
+        ]
+        
+        chrome_binary = None
+        for binary_path in chrome_binary_paths:
+            if os.path.exists(binary_path) and os.access(binary_path, os.X_OK):
+                chrome_binary = binary_path
+                self.logger.info(f"Found Chrome binary: {chrome_binary}")
+                break
+        
+        if chrome_binary:
+            chrome_options.binary_location = chrome_binary
+        else:
+            self.logger.warning("No Chrome binary found, using default (may cause issues)")
         
         try:
             # Use local ChromeDriver from drivers folder

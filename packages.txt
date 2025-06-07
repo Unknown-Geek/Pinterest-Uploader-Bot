@@ -1,5 +1,5 @@
-chromium
-chromium-driver
+chromium-browser
+chromium-chromedriver
 google-chrome-stable
 wget
 curl
@@ -19,3 +19,4 @@ libxrandr2
 libgbm1
 libxss1
 libgconf-2-4
+xvfb

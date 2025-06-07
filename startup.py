@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Startup script for Hugging Face Spaces deployment.
-This script automatically sets up the ChromeDriver before starting the main application.
+Startup script for Render deployment.
+This script automatically sets up the environment before starting the main application.
 """
 
 import os
@@ -11,6 +11,54 @@ import logging
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+def install_system_packages():
+    """Install required system packages on Render"""
+    try:
+        # Check if we're on a system with apt-get (like Render)
+        if os.path.exists('/usr/bin/apt-get'):
+            logger.info("Installing system packages...")
+            
+            # Update package list
+            subprocess.run(['apt-get', 'update'], check=False, capture_output=True)
+            
+            # Install required packages
+            packages = [
+                'chromium-browser',
+                'chromium-chromedriver', 
+                'fonts-liberation',
+                'libappindicator3-1',
+                'libasound2',
+                'libatk-bridge2.0-0',
+                'libatspi2.0-0',
+                'libdrm2',
+                'libgtk-3-0',
+                'libnspr4',
+                'libnss3',
+                'libxcomposite1',
+                'libxdamage1',
+                'libxrandr2',
+                'libgbm1',
+                'libxss1',
+                'xvfb'
+            ]
+            
+            # Install packages individually to avoid failures
+            for package in packages:
+                try:
+                    result = subprocess.run(['apt-get', 'install', '-y', package], 
+                                          check=False, capture_output=True, text=True)
+                    if result.returncode == 0:
+                        logger.info(f"Installed {package}")
+                    else:
+                        logger.warning(f"Failed to install {package}: {result.stderr}")
+                except Exception as e:
+                    logger.warning(f"Error installing {package}: {e}")
+            
+            logger.info("System packages installation completed")
+            
+    except Exception as e:
+        logger.warning(f"Could not install system packages: {e}")
 
 def setup_environment():
     """Setup the environment for Pinterest automation"""
