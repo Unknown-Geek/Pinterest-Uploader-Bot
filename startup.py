@@ -69,7 +69,17 @@ def main():
     try:
         import app
         logger.info("Starting Gradio application...")
-        # The app.py file should contain the Gradio interface
+        
+        # Launch the Gradio interface
+        app.iface.launch(
+            server_name="0.0.0.0",
+            server_port=int(os.environ.get("PORT", 7860)),
+            share=True,
+            debug=False,
+            show_error=True,
+            quiet=False
+        )
+        
     except ImportError as e:
         logger.error(f"Failed to import main application: {e}")
         sys.exit(1)
