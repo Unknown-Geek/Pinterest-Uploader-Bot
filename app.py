@@ -27,12 +27,14 @@ def upload_to_pinterest(email, password, image, title, description, board_name, 
         image (PIL.Image): The image to upload
         title (str): Pin title
         description (str): Pin description
-        board_name (str): Board name to save the pin to
         link_url (str): Optional destination link
     
     Returns:
         tuple: (success_message, log_output)
     """
+    pinterest_bot = None
+    temp_image_path = None
+    
     try:
         logger.info("Starting Pinterest upload process...")
         
@@ -43,9 +45,9 @@ def upload_to_pinterest(email, password, image, title, description, board_name, 
         if not image:
             return "❌ Error: Image is required", "No image provided"
             
-        if not title or not description or not board_name:
-            return "❌ Error: Title, description, and board name are required", "Missing required fields"
-        
+        if not title or not description:
+            return "❌ Error: Title and description are required", "Missing required fields"
+
         # Save the uploaded image to a temporary file
         with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as temp_file:
             image.save(temp_file.name, 'PNG')
@@ -53,58 +55,42 @@ def upload_to_pinterest(email, password, image, title, description, board_name, 
         
         logger.info(f"Image saved to temporary file: {temp_image_path}")
         
-        # Create Pinterest automation instance
+        # Create Pinterest automation instance (using Chromium driver)
         pinterest_bot = PinterestAutomation(headless=True, fast_typing=True)
         
-        # Upload the pin
+        # Use the complete upload_pin workflow
         result = pinterest_bot.upload_pin(
             email=email,
             password=password,
             image_path=temp_image_path,
             title=title,
             description=description,
-            board_name=board_name,
-            link_url=link_url if link_url else None
+            board_name=board_name or "My Pins",  # Use provided board name or default
+            link_url=link_url if link_url and link_url.strip() else None
         )
         
-        # Clean up temporary file
-        try:
-            os.unlink(temp_image_path)
-            logger.info("Temporary file cleaned up")
-        except Exception as e:
-            logger.warning(f"Failed to clean up temporary file: {e}")
-        
-        # Format response
         if result['success']:
-            success_msg = f"✅ {result['message']}"
+            message = f"✅ {result['message']}"
             if result.get('pin_url'):
-                success_msg += f"\n🔗 Pin URL: {result['pin_url']}"
-            return success_msg, "Upload completed successfully"
+                message += f"\n🔗 Pin URL: {result['pin_url']}"
+            return message, "Upload completed successfully"
         else:
-            return f"❌ {result['message']}", "Upload failed"
+            return f"❌ {result['message']}", f"Upload failed: {result['message']}"
             
     except Exception as e:
         logger.error(f"Error in upload_to_pinterest: {str(e)}")
         return f"❌ Unexpected error: {str(e)}", f"Exception: {str(e)}"
-
-def upload_pin_api(email, password, image, title, description, board_name, link_url=None):
-    # Save uploaded image to a temp file
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as temp_img:
-        temp_img.write(image.read())
-        temp_img_path = temp_img.name
     
-    bot = PinterestAutomation(headless=True)
-    result = bot.upload_pin(
-        email=email,
-        password=password,
-        image_path=temp_img_path,
-        title=title,
-        description=description,
-        board_name=board_name,
-        link_url=link_url
-    )
-    os.remove(temp_img_path)
-    return result
+    finally:
+        # Clean up temporary image file
+        if temp_image_path and os.path.exists(temp_image_path):
+            try:
+                os.unlink(temp_image_path)
+                logger.info("Temporary file cleaned up")
+            except Exception as e:
+                logger.warning(f"Failed to clean up temporary file: {e}")
+        
+        # Pinterest automation handles its own driver cleanup
 
 def create_interface():
     """Create and configure the Gradio interface"""
@@ -133,7 +119,7 @@ def create_interface():
         gr.HTML("""
         <div class="header">
             <h1>🎯 Pinterest Auto-Publisher</h1>
-            <p>Automatically upload pins to Pinterest with AI-powered automation</p>
+            <p>Automatically upload pins to Pinterest with browser automation</p>
         </div>
         """)
         
@@ -172,7 +158,8 @@ def create_interface():
                 
                 board_name = gr.Textbox(
                     label="Board Name",
-                    placeholder="Name of the board to save the pin to"
+                    placeholder="My Pins",
+                    value="My Pins"
                 )
                 
                 link_url = gr.Textbox(
@@ -226,11 +213,10 @@ def create_interface():
         3. **Fill in the pin details**:
            - Title: A catchy, descriptive title
            - Description: Detailed description with relevant keywords
-           - Board Name: Exact name of your Pinterest board
            - Link (Optional): URL where users should go when they click your pin
         4. **Click "Upload to Pinterest"** and wait for the process to complete
         
-        **Note**: Make sure your board name matches exactly with your Pinterest board names.
+        **Note**: The automation will handle saving to a board automatically.
         """)
         
         gr.Markdown("### ⚠️ Important Notes")
@@ -238,7 +224,7 @@ def create_interface():
         - This tool uses browser automation to upload pins
         - Keep your credentials secure - they are only used during the session
         - The process may take 30-60 seconds to complete
-        - Make sure your Pinterest account has the specified board created
+        - A browser window will open during the upload process
         - For best results, use high-quality images (recommended: 1000x1500px or 2:3 ratio)
         """)
     

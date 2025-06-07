@@ -1,3 +1,8 @@
+'''
+NOTE
+Don't touch or modify this files content. This is a perfectly working code.
+'''
+
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.common.by import By
@@ -6,10 +11,6 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, NoSuchElementException
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.keys import Keys
-import time
-import os
-import logging
-import random
 import time
 import os
 import logging
@@ -24,7 +25,7 @@ class PinterestAutomation:
         self.fast_typing = fast_typing  # New configuration option
         
     def _setup_driver(self):
-        """Setup Chrome WebDriver with optimized options"""
+        """Setup Chromium WebDriver for Hugging Face Spaces"""
         chrome_options = Options()
         
         if self.headless:
@@ -38,7 +39,7 @@ class PinterestAutomation:
         chrome_options.add_argument('--start-maximized')
         
         # Anti-detection measures
-        chrome_options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
+        chrome_options.add_argument('--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
         chrome_options.add_argument('--disable-blink-features=AutomationControlled')
         chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
         chrome_options.add_experimental_option('useAutomationExtension', False)
@@ -48,21 +49,27 @@ class PinterestAutomation:
         chrome_options.add_argument('--disable-plugins')
         chrome_options.add_argument('--disable-images')  # Faster loading
         
+        # Additional Chromium-specific options for Hugging Face Spaces
+        chrome_options.add_argument('--disable-background-timer-throttling')
+        chrome_options.add_argument('--disable-backgrounding-occluded-windows')
+        chrome_options.add_argument('--disable-renderer-backgrounding')
+        chrome_options.add_argument('--disable-features=TranslateUI')
+        chrome_options.add_argument('--disable-ipc-flooding-protection')
+        
         try:
-            # Try local ChromeDriver first
-            local_driver_path = os.path.join(os.path.dirname(__file__), 'drivers', 'chromedriver.exe')
-            if os.path.exists(local_driver_path):
-                self.driver = webdriver.Chrome(executable_path=local_driver_path, options=chrome_options)
-            else:
-                # Fall back to system PATH
-                self.driver = webdriver.Chrome(options=chrome_options)
+            # Use chromium-driver for Hugging Face Spaces
+            from selenium.webdriver.chrome.service import Service
+            
+            # Use chromium-driver path for Hugging Face Spaces
+            service = Service('/usr/bin/chromium-driver')
+            self.driver = webdriver.Chrome(service=service, options=chrome_options)
                 
             self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
             self.wait = WebDriverWait(self.driver, 20)
             return True
         except Exception as e:
-            self.logger.error(f"Failed to setup driver: {str(e)}")
-            self.logger.error("Make sure ChromeDriver is installed. Run 'python setup_chromedriver.py' to auto-install.")
+            self.logger.error(f"Failed to setup Chromium driver: {str(e)}")
+            self.logger.error("Make sure chromium-driver is installed in /usr/bin/chromium-driver")
             return False
     
     def _human_delay(self, min_delay=1, max_delay=3):
