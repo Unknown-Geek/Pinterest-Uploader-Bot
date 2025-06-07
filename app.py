@@ -178,7 +178,7 @@ def create_interface():
                 link_url = gr.Textbox(
                     label="Destination Link (Optional)",
                     placeholder="https://your-website.com",
-                    type="url"
+                    type="text"
                 )
         
         with gr.Row():
@@ -251,7 +251,6 @@ if __name__ == "__main__":
     # Launch the app
     iface.launch(
         server_name="0.0.0.0",
-        server_port=7860,
         share=True,
         debug=False,
         show_error=True,
