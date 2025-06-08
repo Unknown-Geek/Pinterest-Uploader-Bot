@@ -83,15 +83,41 @@ def setup_google_chrome():
 def setup_environment():
     """Setup the environment for Pinterest automation"""
     try:
-        # Check if Google Chrome is available
-        if not (shutil.which('google-chrome') or os.path.exists('/usr/bin/google-chrome')):
-            logger.error("Google Chrome not found. Please install Google Chrome.")
-            return False
+        # Check if portable Chrome exists, if not download it
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        chrome_binary_path = os.path.join(current_dir, 'chrome', 'chrome-linux64', 'chrome')
+        
+        if not os.path.exists(chrome_binary_path):
+            logger.info("Portable Chrome not found, downloading...")
+            
+            # Run the portable Chrome setup script
+            setup_script = os.path.join(current_dir, 'setup_portable_chrome.py')
+            if os.path.exists(setup_script):
+                result = subprocess.run([sys.executable, setup_script], 
+                                      capture_output=True, text=True)
+                if result.returncode == 0:
+                    logger.info("Portable Chrome setup completed successfully")
+                else:
+                    logger.error(f"Portable Chrome setup failed: {result.stderr}")
+                    return False
+            else:
+                logger.error("Portable Chrome setup script not found")
+                return False
         else:
-            logger.info("Google Chrome is available")
+            logger.info("Portable Chrome already available")
+        
+        # Verify Chrome binary works
+        try:
+            result = subprocess.run([chrome_binary_path, '--version'], 
+                                  capture_output=True, text=True, timeout=10)
+            if result.returncode == 0:
+                logger.info(f"Chrome ready: {result.stdout.strip()}")
+            else:
+                logger.warning(f"Chrome version check failed: {result.stderr}")
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+            logger.warning(f"Chrome verification failed: {e}")
         
         # Add current directory to Python path
-        current_dir = os.path.dirname(os.path.abspath(__file__))
         sys.path.insert(0, current_dir)
         
         # Check if ChromeDriver exists
@@ -148,7 +174,7 @@ def main():
         # Launch the Gradio interface
         app.iface.launch(
             server_name="0.0.0.0",
-            server_port=int(os.environ.get("PORT", 7860)),
+            server_port=int(os.environ.get("PORT", 7862)),
             share=True,
             debug=False,
             show_error=True,

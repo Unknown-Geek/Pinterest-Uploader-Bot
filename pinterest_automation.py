@@ -114,8 +114,17 @@ class PinterestAutomation:
         chrome_options.add_argument(f'--user-data-dir={user_data_dir}')
         self.user_data_dir = user_data_dir  # Store for cleanup
         
-        # Set Chrome binary location to use Google Chrome only
-        chrome_options.binary_location = '/usr/bin/google-chrome'
+        # Set Chrome binary location to use portable Chrome
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        chrome_binary_path = os.path.join(current_dir, 'chrome', 'chrome-linux64', 'chrome')
+        
+        if os.path.exists(chrome_binary_path):
+            chrome_options.binary_location = chrome_binary_path
+            self.logger.info(f"Using portable Chrome binary: {chrome_binary_path}")
+        else:
+            # Fallback to system Chrome if portable Chrome not found
+            chrome_options.binary_location = '/usr/bin/google-chrome'
+            self.logger.warning("Portable Chrome not found, falling back to system Chrome")
         
         try:
             # Use local ChromeDriver from drivers folder
