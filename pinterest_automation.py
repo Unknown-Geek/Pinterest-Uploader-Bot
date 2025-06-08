@@ -128,21 +128,51 @@ class PinterestAutomation:
             self.logger.info(f"Using Chrome binary: {chrome_binary}")
             self.logger.info(f"Using ChromeDriver: {chromedriver_path}")
             
-            # Set up Chrome options - minimal working set
+            # Detect production environment (Render.com, Heroku, etc.)
+            is_production = any(key in os.environ for key in ['RENDER', 'HEROKU', 'DYNO', 'RAILWAY_ENVIRONMENT'])
+            if is_production:
+                self.logger.info("Production environment detected - forcing headless mode")
+                self.headless = True
+            
+            # Set up Chrome options - comprehensive set for production
             chrome_options = Options()
             chrome_options.binary_location = chrome_binary
             
-            if self.headless:
+            # Always use headless in production, or when requested
+            if self.headless or is_production:
                 chrome_options.add_argument("--headless=new")
+                self.logger.info("Using headless mode")
             
-            # Essential container flags
+            # Essential container flags for production environments
             chrome_options.add_argument("--no-sandbox")
             chrome_options.add_argument("--disable-dev-shm-usage")
             chrome_options.add_argument("--disable-gpu")
             chrome_options.add_argument("--disable-web-security")
-            chrome_options.add_argument("--disable-features=VizDisplayCompositor")
+            chrome_options.add_argument("--no-first-run")
+            chrome_options.add_argument("--no-default-browser-check")
+            chrome_options.add_argument("--disable-default-apps")
+            chrome_options.add_argument("--disable-extensions")
+            chrome_options.add_argument("--disable-background-timer-throttling")
+            chrome_options.add_argument("--disable-backgrounding-occluded-windows")
+            chrome_options.add_argument("--disable-renderer-backgrounding")
+            chrome_options.add_argument("--disable-features=TranslateUI,BlinkGenPropertyTrees,VizDisplayCompositor")
+            chrome_options.add_argument("--disable-component-extensions-with-background-pages")
+            chrome_options.add_argument("--disable-background-networking")
+            chrome_options.add_argument("--disable-sync")
+            chrome_options.add_argument("--disable-plugins")
+            chrome_options.add_argument("--disable-popup-blocking")
+            chrome_options.add_argument("--disable-prompt-on-repost")
+            chrome_options.add_argument("--disable-hang-monitor")
+            chrome_options.add_argument("--disable-client-side-phishing-detection")
+            chrome_options.add_argument("--disable-component-update")
+            chrome_options.add_argument("--no-zygote")
+            chrome_options.add_argument("--single-process")
             chrome_options.add_argument("--remote-debugging-port=0")  # Let Chrome choose port
             chrome_options.add_argument("--window-size=1920,1080")
+            chrome_options.add_argument("--start-maximized")
+            chrome_options.add_argument("--disable-logging")
+            chrome_options.add_argument("--log-level=3")
+            chrome_options.add_argument("--silent")
             
             # Create unique profile directory
             import tempfile
@@ -156,13 +186,35 @@ class PinterestAutomation:
             chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
             chrome_options.add_experimental_option('useAutomationExtension', False)
             
-            # Create Chrome service
+            # Create Chrome service with verbose logging for debugging
             from selenium.webdriver.chrome.service import Service
             service = Service(chromedriver_path)
-            
+            if is_production:
+                # Add service arguments for better production debugging
+                service.log_output = subprocess.DEVNULL  # Suppress verbose logs in production
+                
             # Create Chrome driver instance
             self.logger.info("Creating Chrome driver instance...")
-            self.driver = webdriver.Chrome(service=service, options=chrome_options)
+            try:
+                self.driver = webdriver.Chrome(service=service, options=chrome_options)
+                self.logger.info("Chrome driver created successfully")
+            except Exception as chrome_error:
+                self.logger.error(f"Chrome driver creation failed: {chrome_error}")
+                
+                # Try to get more detailed error information
+                self.logger.error(f"Chrome binary exists: {os.path.exists(chrome_binary)}")
+                self.logger.error(f"ChromeDriver exists: {os.path.exists(chromedriver_path)}")
+                
+                # Try manual Chrome execution to see what fails
+                try:
+                    test_result = subprocess.run([
+                        chrome_binary, '--version'
+                    ], capture_output=True, text=True, timeout=10)
+                    self.logger.error(f"Chrome test result: {test_result.stdout}, Error: {test_result.stderr}")
+                except Exception as test_error:
+                    self.logger.error(f"Chrome manual test failed: {test_error}")
+                
+                raise chrome_error
             
             # Set timeouts and configure
             self.driver.set_page_load_timeout(30)
@@ -178,6 +230,8 @@ class PinterestAutomation:
             
         except Exception as e:
             self.logger.error(f"Failed to setup Chrome driver: {e}")
+            # Additional debugging for production
+            self.logger.error(f"Environment variables: RENDER={os.environ.get('RENDER')}, DISPLAY={os.environ.get('DISPLAY')}")
             return False
     
     def _human_delay(self, min_delay=1, max_delay=3):
