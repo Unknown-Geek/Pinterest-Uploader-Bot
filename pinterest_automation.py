@@ -143,36 +143,53 @@ class PinterestAutomation:
                 chrome_options.add_argument("--headless=new")
                 self.logger.info("Using headless mode")
             
-            # Essential container flags for production environments
+            # Essential container flags - comprehensive production approach
             chrome_options.add_argument("--no-sandbox")
             chrome_options.add_argument("--disable-dev-shm-usage")
             chrome_options.add_argument("--disable-gpu")
             chrome_options.add_argument("--disable-web-security")
             chrome_options.add_argument("--no-first-run")
-            chrome_options.add_argument("--no-default-browser-check")
             chrome_options.add_argument("--disable-default-apps")
             chrome_options.add_argument("--disable-extensions")
             chrome_options.add_argument("--disable-background-timer-throttling")
             chrome_options.add_argument("--disable-backgrounding-occluded-windows")
             chrome_options.add_argument("--disable-renderer-backgrounding")
-            chrome_options.add_argument("--disable-features=TranslateUI,BlinkGenPropertyTrees,VizDisplayCompositor")
-            chrome_options.add_argument("--disable-component-extensions-with-background-pages")
-            chrome_options.add_argument("--disable-background-networking")
-            chrome_options.add_argument("--disable-sync")
-            chrome_options.add_argument("--disable-plugins")
-            chrome_options.add_argument("--disable-popup-blocking")
-            chrome_options.add_argument("--disable-prompt-on-repost")
-            chrome_options.add_argument("--disable-hang-monitor")
-            chrome_options.add_argument("--disable-client-side-phishing-detection")
-            chrome_options.add_argument("--disable-component-update")
-            chrome_options.add_argument("--no-zygote")
-            chrome_options.add_argument("--single-process")
-            chrome_options.add_argument("--remote-debugging-port=0")  # Let Chrome choose port
+            chrome_options.add_argument("--disable-features=TranslateUI,VizDisplayCompositor")
             chrome_options.add_argument("--window-size=1920,1080")
-            chrome_options.add_argument("--start-maximized")
-            chrome_options.add_argument("--disable-logging")
-            chrome_options.add_argument("--log-level=3")
-            chrome_options.add_argument("--silent")
+            
+            # Additional production-specific flags for container environments
+            if is_production:
+                chrome_options.add_argument("--disable-software-rasterizer")
+                chrome_options.add_argument("--disable-background-networking")
+                chrome_options.add_argument("--disable-sync")
+                chrome_options.add_argument("--disable-translate")
+                chrome_options.add_argument("--hide-scrollbars")
+                chrome_options.add_argument("--metrics-recording-only")
+                chrome_options.add_argument("--mute-audio")
+                chrome_options.add_argument("--no-default-browser-check")
+                chrome_options.add_argument("--no-pings")
+                chrome_options.add_argument("--password-store=basic")
+                chrome_options.add_argument("--use-mock-keychain")
+                chrome_options.add_argument("--disable-component-update")
+                chrome_options.add_argument("--disable-domain-reliability")
+                chrome_options.add_argument("--disable-features=AudioServiceOutOfProcess,VizDisplayCompositor")
+                chrome_options.add_argument("--force-color-profile=srgb")
+                chrome_options.add_argument("--disable-canvas-aa")
+                chrome_options.add_argument("--disable-2d-canvas-clip-aa")
+                chrome_options.add_argument("--disable-gl-drawing-for-tests")
+                chrome_options.add_argument("--disable-accelerated-2d-canvas")
+                chrome_options.add_argument("--disable-accelerated-jpeg-decoding")
+                chrome_options.add_argument("--disable-accelerated-mjpeg-decode")
+                chrome_options.add_argument("--disable-accelerated-video-decode")
+                chrome_options.add_argument("--disable-accelerated-video-encode")
+                chrome_options.add_argument("--disable-gpu-rasterization")
+                chrome_options.add_argument("--disable-gpu-sandbox")
+                # Critical for container environments - prevents DevToolsActivePort errors
+                chrome_options.add_argument("--remote-debugging-port=9222")
+                chrome_options.add_argument("--remote-debugging-address=0.0.0.0")
+            else:
+                # For local development, use a dynamic port
+                chrome_options.add_argument("--remote-debugging-port=0")
             
             # Create unique profile directory
             import tempfile
@@ -180,6 +197,15 @@ class PinterestAutomation:
             profile_dir = f"/tmp/pinterest_chrome_profile_{uuid.uuid4().hex}"
             chrome_options.add_argument(f"--user-data-dir={profile_dir}")
             self.user_data_dir = profile_dir
+            
+            # Set up environment variables for production
+            if is_production:
+                # Set minimal environment for Chrome in containers
+                os.environ['DISPLAY'] = ':99'  # Use virtual display
+                os.environ['CHROME_LOG_FILE'] = '/tmp/chrome_debug.log'
+                # Ensure proper permissions for tmp directory
+                os.makedirs('/tmp/chrome_logs', mode=0o755, exist_ok=True)
+                self.logger.info("Set production environment variables")
             
             # Anti-detection
             chrome_options.add_argument('--disable-blink-features=AutomationControlled')
@@ -193,28 +219,58 @@ class PinterestAutomation:
                 # Add service arguments for better production debugging
                 service.log_output = subprocess.DEVNULL  # Suppress verbose logs in production
                 
-            # Create Chrome driver instance
+            # Create Chrome driver instance with retry logic
             self.logger.info("Creating Chrome driver instance...")
-            try:
-                self.driver = webdriver.Chrome(service=service, options=chrome_options)
-                self.logger.info("Chrome driver created successfully")
-            except Exception as chrome_error:
-                self.logger.error(f"Chrome driver creation failed: {chrome_error}")
-                
-                # Try to get more detailed error information
-                self.logger.error(f"Chrome binary exists: {os.path.exists(chrome_binary)}")
-                self.logger.error(f"ChromeDriver exists: {os.path.exists(chromedriver_path)}")
-                
-                # Try manual Chrome execution to see what fails
+            max_retries = 3 if is_production else 1
+            
+            for attempt in range(max_retries):
                 try:
-                    test_result = subprocess.run([
-                        chrome_binary, '--version'
-                    ], capture_output=True, text=True, timeout=10)
-                    self.logger.error(f"Chrome test result: {test_result.stdout}, Error: {test_result.stderr}")
-                except Exception as test_error:
-                    self.logger.error(f"Chrome manual test failed: {test_error}")
-                
-                raise chrome_error
+                    if attempt > 0:
+                        self.logger.info(f"Retry attempt {attempt + 1}/{max_retries}")
+                        time.sleep(2)  # Brief delay between retries
+                    
+                    self.driver = webdriver.Chrome(service=service, options=chrome_options)
+                    self.logger.info("Chrome driver created successfully")
+                    break
+                    
+                except Exception as chrome_error:
+                    self.logger.error(f"Chrome driver creation attempt {attempt + 1} failed: {chrome_error}")
+                    
+                    if attempt == max_retries - 1:  # Last attempt
+                        # Try to get more detailed error information
+                        self.logger.error(f"Chrome binary exists: {os.path.exists(chrome_binary)}")
+                        self.logger.error(f"ChromeDriver exists: {os.path.exists(chromedriver_path)}")
+                        
+                        # Try manual Chrome execution to see what fails
+                        try:
+                            test_result = subprocess.run([
+                                chrome_binary, '--version'
+                            ], capture_output=True, text=True, timeout=10)
+                            self.logger.error(f"Chrome test result: {test_result.stdout}, Error: {test_result.stderr}")
+                        except Exception as test_error:
+                            self.logger.error(f"Chrome manual test failed: {test_error}")
+                        
+                        # Check if profile directory exists and permissions
+                        if os.path.exists(profile_dir):
+                            self.logger.error(f"Profile directory exists: {profile_dir}")
+                            try:
+                                shutil.rmtree(profile_dir, ignore_errors=True)
+                                self.logger.info("Cleaned up profile directory for retry")
+                            except:
+                                pass
+                        
+                        raise chrome_error
+                    else:
+                        # Clean up for retry
+                        if os.path.exists(profile_dir):
+                            try:
+                                shutil.rmtree(profile_dir, ignore_errors=True)
+                            except:
+                                pass
+                        # Create new profile directory for next attempt
+                        profile_dir = f"/tmp/pinterest_chrome_profile_{uuid.uuid4().hex}"
+                        chrome_options.add_argument(f"--user-data-dir={profile_dir}")
+                        self.user_data_dir = profile_dir
             
             # Set timeouts and configure
             self.driver.set_page_load_timeout(30)

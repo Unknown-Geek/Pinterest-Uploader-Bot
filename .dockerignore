@@ -1,0 +1,23 @@
+# Ignore development files
+*.pyc
+__pycache__/
+.git/
+.gitignore
+*.log
+.env
+.vscode/
+*.md
+test_*.py
+debug_*.py
+quick_test.py
+simple_*.py
+
+# Keep essential files
+!requirements.txt
+!packages.txt
+!app.py
+!pinterest_automation.py
+!setup_*.py
+!startup.py
+!chrome/
+!drivers/

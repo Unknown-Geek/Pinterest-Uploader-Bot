@@ -1,5 +1,5 @@
 ---
-title: Pinterest Auto-Publisher
+title: Pinterest-Auto-Publisher
 emoji: 🎯
 colorFrom: blue
 colorTo: purple
@@ -45,6 +45,22 @@ An AI-powered automation tool for uploading pins to Pinterest using Selenium Web
 - Uses headless Chrome browser for automation
 - Supports Pinterest's React-based interface
 - Includes anti-detection measures for reliable automation
+- **Chrome Version**: 131.0.6778.87 (hardcoded for compatibility)
+- **ChromeDriver Version**: 131.0.6778.87 (matching)
+- **Production Ready**: Optimized Chrome flags for containerized environments
+
+## Deployment
+
+### Hugging Face Spaces
+1. Create a new Space on Hugging Face
+2. Use repository name: `pinterest-auto-publisher` (lowercase, hyphens only)
+3. Upload all files to the Space
+4. The application will auto-deploy using `app.py`
+
+### Other Platforms (Render.com, Railway, etc.)
+1. Use `startup_enhanced.py` for robust initialization
+2. Run validation with: `python validate_deployment.py`
+3. The app includes production Chrome configuration
 
 ## Setup for Development
 

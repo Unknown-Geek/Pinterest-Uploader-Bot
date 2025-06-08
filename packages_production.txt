@@ -1,0 +1,28 @@
+# Production-specific packages for containerized deployment
+# These packages help ensure Chrome runs properly in production environments
+
+# Essential for Chrome in containers
+chromium-browser
+chromium-driver
+xvfb
+dbus-x11
+
+# Font and display support
+fonts-liberation
+fonts-noto-cjk
+fonts-noto-color-emoji
+fonts-freefont-ttf
+
+# Additional container stability packages
+libnss3-dev
+libgconf-2-4
+libxss1
+libxrandr2
+libasound2
+libpangocairo-1.0-0
+libgtk-3-0
+libxss1
+libgdk-pixbuf2.0-0
+
+# Audio/video codecs (sometimes needed)
+libavcodec-extra

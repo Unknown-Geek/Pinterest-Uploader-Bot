@@ -218,7 +218,7 @@ def create_interface():
     }
     """
     
-    with gr.Blocks(css=css, title="Pinterest Auto-Publisher") as interface:
+    with gr.Blocks(css=css, title="Pinterest-Auto-Publisher") as interface:
         gr.HTML("""
         <div class="header">
             <h1>🎯 Pinterest Auto-Publisher</h1>
