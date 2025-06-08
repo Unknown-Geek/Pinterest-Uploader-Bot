@@ -21,6 +21,10 @@ import time
 import os
 import logging
 import random
+import tempfile
+import uuid
+import glob
+import shutil
 
 class PinterestAutomation:    
     def __init__(self, headless=False, fast_typing=True):
@@ -29,6 +33,23 @@ class PinterestAutomation:
         self.wait = None
         self.logger = logging.getLogger(__name__)
         self.fast_typing = fast_typing  # New configuration option
+        self.user_data_dir = None  # Store user data directory for cleanup
+        
+    def cleanup(self):
+        """Clean up resources and temporary directories"""
+        try:
+            if self.driver:
+                self.driver.quit()
+                self.driver = None
+        except:
+            pass
+        
+        # Clean up user data directory
+        if self.user_data_dir and os.path.exists(self.user_data_dir):
+            try:
+                shutil.rmtree(self.user_data_dir, ignore_errors=True)
+            except:
+                pass
         
     def _setup_driver(self):
         """Setup Chromium WebDriver for Hugging Face Spaces"""
@@ -62,13 +83,38 @@ class PinterestAutomation:
         chrome_options.add_argument('--disable-features=TranslateUI')
         chrome_options.add_argument('--disable-ipc-flooding-protection')
         
+        # Additional options to prevent session conflicts
+        chrome_options.add_argument('--disable-background-networking')
+        chrome_options.add_argument('--disable-sync')
+        chrome_options.add_argument('--disable-translate')
+        chrome_options.add_argument('--disable-web-security')
+        chrome_options.add_argument('--no-first-run')
+        chrome_options.add_argument('--no-default-browser-check')
+        chrome_options.add_argument('--disable-default-apps')
+        
         # Create unique user data directory for each instance to avoid conflicts
         import tempfile
         import uuid
-        user_data_dir = f"/tmp/chrome_user_data_{uuid.uuid4().hex[:8]}"
-        chrome_options.add_argument(f'--user-data-dir={user_data_dir}')
+        import glob
+        import time
         
-        # Set Chrome binary location to use Google Chrome
+        # Clean up any existing user data directories from previous runs
+        old_user_data_dirs = glob.glob("/tmp/chrome_user_data_*")
+        for old_dir in old_user_data_dirs:
+            try:
+                import shutil
+                shutil.rmtree(old_dir, ignore_errors=True)
+            except:
+                pass
+        
+        # Create a unique user data directory with timestamp and PID
+        timestamp = int(time.time())
+        user_data_dir = f"/tmp/chrome_user_data_{uuid.uuid4().hex[:8]}_{os.getpid()}_{timestamp}"
+        os.makedirs(user_data_dir, exist_ok=True)
+        chrome_options.add_argument(f'--user-data-dir={user_data_dir}')
+        self.user_data_dir = user_data_dir  # Store for cleanup
+        
+        # Set Chrome binary location to use Google Chrome only
         chrome_options.binary_location = '/usr/bin/google-chrome'
         
         try:
@@ -79,28 +125,12 @@ class PinterestAutomation:
             current_dir = os.path.dirname(os.path.abspath(__file__))
             chromedriver_path = os.path.join(current_dir, 'drivers', 'chromedriver')
             
-            # Fallback paths for different environments
-            fallback_paths = [
-                '/usr/bin/chromedriver',
-                '/usr/bin/chromium-driver',
-                '/usr/local/bin/chromedriver'
-            ]
-            
             # Check if local ChromeDriver exists
             if os.path.exists(chromedriver_path) and os.access(chromedriver_path, os.X_OK):
                 self.logger.info(f"Using local ChromeDriver: {chromedriver_path}")
                 service = Service(chromedriver_path)
             else:
-                # Try fallback paths
-                service = None
-                for fallback_path in fallback_paths:
-                    if os.path.exists(fallback_path) and os.access(fallback_path, os.X_OK):
-                        self.logger.info(f"Using fallback ChromeDriver: {fallback_path}")
-                        service = Service(fallback_path)
-                        break
-                
-                if service is None:
-                    raise Exception(f"ChromeDriver not found. Please ensure chromedriver is in {chromedriver_path} or in system PATH")
+                raise Exception(f"ChromeDriver not found at {chromedriver_path}. Make sure the chromedriver is in the drivers folder.")
             
             self.driver = webdriver.Chrome(service=service, options=chrome_options)
                 
