@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Setup script to download and configure portable Chrome and ChromeDriver
-This creates a self-contained setup that doesn't require system installations
+Setup script to download and configure portable Chrome with hardcoded version
+for maximum compatibility with ChromeDriver
 """
 
 import os
@@ -15,6 +15,9 @@ import logging
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Hardcoded Chrome version for maximum compatibility
+CHROME_VERSION = "131.0.6778.87"
 
 def download_file(url, filename):
     """Download a file with progress indication"""
@@ -45,8 +48,9 @@ def setup_portable_chrome():
     # Create chrome directory
     os.makedirs(chrome_dir, exist_ok=True)
     
-    # Chrome download URL (latest stable for Linux x64)
-    chrome_url = "https://storage.googleapis.com/chrome-for-testing-public/131.0.6778.87/linux64/chrome-linux64.zip"
+    # Chrome download URL (hardcoded version for consistency)
+    logger.info(f"Setting up Chrome version {CHROME_VERSION}")
+    chrome_url = f"https://storage.googleapis.com/chrome-for-testing-public/{CHROME_VERSION}/linux64/chrome-linux64.zip"
     chrome_zip = os.path.join(chrome_dir, 'chrome-linux64.zip')
     
     # Download Chrome

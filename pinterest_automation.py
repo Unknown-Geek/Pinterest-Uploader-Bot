@@ -25,6 +25,10 @@ import tempfile
 import uuid
 import glob
 import shutil
+import subprocess
+import sys
+import threading
+import queue
 
 class PinterestAutomation:    
     def __init__(self, headless=False, fast_typing=True):
@@ -39,116 +43,141 @@ class PinterestAutomation:
         """Clean up resources and temporary directories"""
         try:
             if self.driver:
+                # Close all windows first
+                try:
+                    for handle in self.driver.window_handles:
+                        self.driver.switch_to.window(handle)
+                        self.driver.close()
+                except:
+                    pass
+                
+                # Quit the driver
                 self.driver.quit()
                 self.driver = None
+                self.logger.info("Chrome driver closed successfully")
+        except Exception as e:
+            self.logger.warning(f"Error closing driver: {e}")
+        
+        # Force kill any remaining chrome processes to ensure cleanup
+        try:
+            import subprocess
+            # Kill chrome processes more aggressively
+            subprocess.run(['pkill', '-f', 'chrome'], capture_output=True, timeout=10)
+            subprocess.run(['pkill', '-9', '-f', 'chrome'], capture_output=True, timeout=10)
+            # Also kill chromedriver processes
+            subprocess.run(['pkill', '-f', 'chromedriver'], capture_output=True, timeout=10)
+            subprocess.run(['pkill', '-9', '-f', 'chromedriver'], capture_output=True, timeout=10)
+            time.sleep(1)  # Give processes time to fully terminate
+        except Exception as e:
+            self.logger.warning(f"Error killing chrome processes: {e}")
+        
+        # Clean up user data directory with retry mechanism
+        if self.user_data_dir and os.path.exists(self.user_data_dir):
+            max_retries = 5
+            for attempt in range(max_retries):
+                try:
+                    # Change permissions to ensure we can delete
+                    subprocess.run(['chmod', '-R', '755', self.user_data_dir], capture_output=True, timeout=5)
+                    shutil.rmtree(self.user_data_dir, ignore_errors=True)
+                    if not os.path.exists(self.user_data_dir):
+                        self.logger.info(f"Chrome profile directory cleaned up: {self.user_data_dir}")
+                        break
+                except Exception as e:
+                    self.logger.warning(f"Cleanup attempt {attempt + 1} failed: {e}")
+                time.sleep(1)  # Wait before retry
+            
+            # If all retries failed, try force deletion
+            if os.path.exists(self.user_data_dir):
+                try:
+                    subprocess.run(['rm', '-rf', self.user_data_dir], capture_output=True, timeout=10)
+                    self.logger.info(f"Force deleted profile directory: {self.user_data_dir}")
+                except:
+                    self.logger.warning(f"Could not force delete profile directory: {self.user_data_dir}")
+        
+        # Clean up any orphaned chrome profile directories
+        try:
+            old_profile_dirs = glob.glob("/tmp/pinterest_chrome_profile_*")
+            for old_dir in old_profile_dirs:
+                try:
+                    # Check if directory is older than 1 hour (stale)
+                    if os.path.exists(old_dir):
+                        age = time.time() - os.path.getctime(old_dir)
+                        if age > 3600:  # 1 hour
+                            subprocess.run(['chmod', '-R', '755', old_dir], capture_output=True, timeout=5)
+                            shutil.rmtree(old_dir, ignore_errors=True)
+                            self.logger.info(f"Cleaned up stale profile directory: {old_dir}")
+                except:
+                    pass
         except:
             pass
         
-        # Clean up user data directory
-        if self.user_data_dir and os.path.exists(self.user_data_dir):
-            try:
-                shutil.rmtree(self.user_data_dir, ignore_errors=True)
-            except:
-                pass
-        
     def _setup_driver(self):
-        """Setup Chromium WebDriver for Hugging Face Spaces"""
-        chrome_options = Options()
-        
-        if self.headless:
-            chrome_options.add_argument('--headless')
-        
-        # Essential options for reliability
-        chrome_options.add_argument('--no-sandbox')
-        chrome_options.add_argument('--disable-dev-shm-usage')
-        chrome_options.add_argument('--disable-gpu')
-        chrome_options.add_argument('--window-size=1920,1080')
-        chrome_options.add_argument('--start-maximized')
-        
-        # Anti-detection measures
-        chrome_options.add_argument('--user-agent=Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')
-        chrome_options.add_argument('--disable-blink-features=AutomationControlled')
-        chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-        chrome_options.add_experimental_option('useAutomationExtension', False)
-        
-        # Performance optimizations
-        chrome_options.add_argument('--disable-extensions')
-        chrome_options.add_argument('--disable-plugins')
-        chrome_options.add_argument('--disable-images')  # Faster loading
-        
-        # Additional Chromium-specific options for Hugging Face Spaces
-        chrome_options.add_argument('--disable-background-timer-throttling')
-        chrome_options.add_argument('--disable-backgrounding-occluded-windows')
-        chrome_options.add_argument('--disable-renderer-backgrounding')
-        chrome_options.add_argument('--disable-features=TranslateUI')
-        chrome_options.add_argument('--disable-ipc-flooding-protection')
-        
-        # Additional options to prevent session conflicts
-        chrome_options.add_argument('--disable-background-networking')
-        chrome_options.add_argument('--disable-sync')
-        chrome_options.add_argument('--disable-translate')
-        chrome_options.add_argument('--disable-web-security')
-        chrome_options.add_argument('--no-first-run')
-        chrome_options.add_argument('--no-default-browser-check')
-        chrome_options.add_argument('--disable-default-apps')
-        
-        # Create unique user data directory for each instance to avoid conflicts
-        import tempfile
-        import uuid
-        import glob
-        import time
-        
-        # Clean up any existing user data directories from previous runs
-        old_user_data_dirs = glob.glob("/tmp/chrome_user_data_*")
-        for old_dir in old_user_data_dirs:
-            try:
-                import shutil
-                shutil.rmtree(old_dir, ignore_errors=True)
-            except:
-                pass
-        
-        # Create a unique user data directory with timestamp and PID
-        timestamp = int(time.time())
-        user_data_dir = f"/tmp/chrome_user_data_{uuid.uuid4().hex[:8]}_{os.getpid()}_{timestamp}"
-        os.makedirs(user_data_dir, exist_ok=True)
-        chrome_options.add_argument(f'--user-data-dir={user_data_dir}')
-        self.user_data_dir = user_data_dir  # Store for cleanup
-        
-        # Set Chrome binary location to use portable Chrome
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        chrome_binary_path = os.path.join(current_dir, 'chrome', 'chrome-linux64', 'chrome')
-        
-        if os.path.exists(chrome_binary_path):
-            chrome_options.binary_location = chrome_binary_path
-            self.logger.info(f"Using portable Chrome binary: {chrome_binary_path}")
-        else:
-            # Fallback to system Chrome if portable Chrome not found
-            chrome_options.binary_location = '/usr/bin/google-chrome'
-            self.logger.warning("Portable Chrome not found, falling back to system Chrome")
-        
+        """Setup Chrome WebDriver - simplified working version"""
         try:
-            # Use local ChromeDriver from drivers folder
-            from selenium.webdriver.chrome.service import Service
-            
-            # Get the absolute path to the ChromeDriver in the project directory
+            # Chrome paths
             current_dir = os.path.dirname(os.path.abspath(__file__))
+            chrome_binary = os.path.join(current_dir, 'chrome', 'chrome-linux64', 'chrome')
             chromedriver_path = os.path.join(current_dir, 'drivers', 'chromedriver')
             
-            # Check if local ChromeDriver exists
-            if os.path.exists(chromedriver_path) and os.access(chromedriver_path, os.X_OK):
-                self.logger.info(f"Using local ChromeDriver: {chromedriver_path}")
-                service = Service(chromedriver_path)
-            else:
-                raise Exception(f"ChromeDriver not found at {chromedriver_path}. Make sure the chromedriver is in the drivers folder.")
+            # Verify files exist
+            if not os.path.exists(chrome_binary):
+                raise Exception(f"Chrome binary not found: {chrome_binary}")
+            if not os.path.exists(chromedriver_path):
+                raise Exception(f"ChromeDriver not found: {chromedriver_path}")
             
+            self.logger.info(f"Using Chrome binary: {chrome_binary}")
+            self.logger.info(f"Using ChromeDriver: {chromedriver_path}")
+            
+            # Set up Chrome options - minimal working set
+            chrome_options = Options()
+            chrome_options.binary_location = chrome_binary
+            
+            if self.headless:
+                chrome_options.add_argument("--headless=new")
+            
+            # Essential container flags
+            chrome_options.add_argument("--no-sandbox")
+            chrome_options.add_argument("--disable-dev-shm-usage")
+            chrome_options.add_argument("--disable-gpu")
+            chrome_options.add_argument("--disable-web-security")
+            chrome_options.add_argument("--disable-features=VizDisplayCompositor")
+            chrome_options.add_argument("--remote-debugging-port=0")  # Let Chrome choose port
+            chrome_options.add_argument("--window-size=1920,1080")
+            
+            # Create unique profile directory
+            import tempfile
+            import uuid
+            profile_dir = f"/tmp/pinterest_chrome_profile_{uuid.uuid4().hex}"
+            chrome_options.add_argument(f"--user-data-dir={profile_dir}")
+            self.user_data_dir = profile_dir
+            
+            # Anti-detection
+            chrome_options.add_argument('--disable-blink-features=AutomationControlled')
+            chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
+            chrome_options.add_experimental_option('useAutomationExtension', False)
+            
+            # Create Chrome service
+            from selenium.webdriver.chrome.service import Service
+            service = Service(chromedriver_path)
+            
+            # Create Chrome driver instance
+            self.logger.info("Creating Chrome driver instance...")
             self.driver = webdriver.Chrome(service=service, options=chrome_options)
-                
+            
+            # Set timeouts and configure
+            self.driver.set_page_load_timeout(30)
+            self.driver.implicitly_wait(10)
             self.driver.execute_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+            
+            # Initialize WebDriverWait
+            from selenium.webdriver.support.ui import WebDriverWait
             self.wait = WebDriverWait(self.driver, 20)
+            
+            self.logger.info("✅ Chrome driver initialized successfully")
             return True
+            
         except Exception as e:
-            self.logger.error(f"Failed to setup ChromeDriver: {str(e)}")
-            self.logger.error(f"Make sure chromedriver is installed in {os.path.join(os.path.dirname(os.path.abspath(__file__)), 'drivers', 'chromedriver')}")
+            self.logger.error(f"Failed to setup Chrome driver: {e}")
             return False
     
     def _human_delay(self, min_delay=1, max_delay=3):
@@ -1829,8 +1858,7 @@ class PinterestAutomation:
     def quit(self):
         """Close browser session and cleanup"""
         try:
-            if hasattr(self, 'driver') and self.driver:
-                self.driver.quit()
-                self.logger.info("Browser session closed successfully")
+            self.cleanup()  # Use enhanced cleanup method
+            self.logger.info("Browser session closed and cleaned up successfully")
         except Exception as e:
             self.logger.error(f"Error closing browser: {str(e)}")

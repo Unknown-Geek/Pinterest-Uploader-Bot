@@ -42,7 +42,7 @@ def get_or_create_pinterest_bot(email, password):
             # Clean up existing bot if any
             if global_pinterest_bot:
                 try:
-                    global_pinterest_bot.quit()
+                    global_pinterest_bot.cleanup()  # Use enhanced cleanup
                 except:
                     pass
             
@@ -72,7 +72,7 @@ def get_or_create_pinterest_bot(email, password):
         # Clean up on error
         if global_pinterest_bot:
             try:
-                global_pinterest_bot.quit()
+                global_pinterest_bot.cleanup()  # Use enhanced cleanup
             except:
                 pass
             global_pinterest_bot = None
@@ -86,12 +86,39 @@ def cleanup_pinterest_bot():
     if global_pinterest_bot:
         try:
             logger.info("🧹 Cleaning up Pinterest bot session...")
-            global_pinterest_bot.quit()
+            global_pinterest_bot.cleanup()  # Use the enhanced cleanup method
         except Exception as e:
             logger.warning(f"Error during cleanup: {str(e)}")
         finally:
             global_pinterest_bot = None
             current_credentials = {"email": None, "password": None}
+    
+    # Additional cleanup: kill any remaining Chrome processes
+    try:
+        import subprocess
+        subprocess.run(['pkill', '-f', 'chrome'], capture_output=True, timeout=10)
+        subprocess.run(['pkill', '-9', '-f', 'chrome'], capture_output=True, timeout=10)
+        subprocess.run(['pkill', '-f', 'chromedriver'], capture_output=True, timeout=10)
+        logger.info("Killed any remaining Chrome processes")
+    except Exception as e:
+        logger.warning(f"Error killing processes: {e}")
+    
+    # Clean up any orphaned chrome profile directories
+    try:
+        import glob
+        import shutil
+        import time
+        old_profile_dirs = glob.glob("/tmp/pinterest_chrome_profile_*")
+        for old_dir in old_profile_dirs:
+            try:
+                if os.path.exists(old_dir):
+                    subprocess.run(['chmod', '-R', '755', old_dir], capture_output=True, timeout=5)
+                    shutil.rmtree(old_dir, ignore_errors=True)
+                    logger.info(f"Cleaned up profile directory: {old_dir}")
+            except:
+                pass
+    except:
+        pass
 
 # Register cleanup function to run on app shutdown
 atexit.register(cleanup_pinterest_bot)
@@ -305,6 +332,48 @@ def create_interface():
         """)
     
     return interface
+
+# Perform initial cleanup at startup
+def initial_cleanup():
+    """Perform initial cleanup to ensure clean environment"""
+    try:
+        import subprocess
+        import glob
+        import shutil
+        
+        logger.info("Performing initial cleanup...")
+        
+        # Kill any existing Chrome processes
+        subprocess.run(['pkill', '-f', 'chrome'], capture_output=True, timeout=10)
+        subprocess.run(['pkill', '-9', '-f', 'chrome'], capture_output=True, timeout=10)
+        subprocess.run(['pkill', '-f', 'chromedriver'], capture_output=True, timeout=10)
+        
+        # Clean up any existing chrome profile directories
+        old_profile_dirs = glob.glob("/tmp/pinterest_chrome_profile_*")
+        for old_dir in old_profile_dirs:
+            try:
+                if os.path.exists(old_dir):
+                    subprocess.run(['chmod', '-R', '755', old_dir], capture_output=True, timeout=5)
+                    shutil.rmtree(old_dir, ignore_errors=True)
+                    logger.info(f"Cleaned up old profile directory: {old_dir}")
+            except:
+                pass
+        
+        # Clean up any chrome log files
+        import glob
+        for log_file in glob.glob("/tmp/chromedriver_*.log"):
+            try:
+                os.unlink(log_file)
+            except:
+                pass
+        
+        logger.info("Initial cleanup completed")
+        
+    except Exception as e:
+        logger.warning(f"Initial cleanup error: {e}")
+
+# Perform initial cleanup
+initial_cleanup()
 
 # Create the interface
 iface = create_interface()
