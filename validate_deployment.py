@@ -82,7 +82,7 @@ def validate_chrome_initialization():
         chromedriver_path = current_dir / 'drivers' / 'chromedriver'
         
         # Detect production environment
-        is_production = any(key in os.environ for key in ['RENDER', 'HEROKU', 'DYNO', 'RAILWAY_ENVIRONMENT'])
+        is_production = any(key in os.environ for key in ['RENDER', 'HEROKU', 'DYNO', 'RAILWAY_ENVIRONMENT', 'SPACE_ID'])
         logger.info(f"Production environment detected: {is_production}")
         
         # Set up Chrome options
@@ -140,7 +140,7 @@ def validate_environment():
     logger.info(f"Python version: {sys.version}")
     
     # Check environment variables
-    env_vars = ['RENDER', 'HEROKU', 'DYNO', 'RAILWAY_ENVIRONMENT']
+    env_vars = ['RENDER', 'HEROKU', 'DYNO', 'RAILWAY_ENVIRONMENT', 'SPACE_ID']
     for var in env_vars:
         if var in os.environ:
             logger.info(f"Environment variable {var} detected")

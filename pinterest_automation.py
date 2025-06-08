@@ -128,8 +128,8 @@ class PinterestAutomation:
             self.logger.info(f"Using Chrome binary: {chrome_binary}")
             self.logger.info(f"Using ChromeDriver: {chromedriver_path}")
             
-            # Detect production environment (Render.com, Heroku, etc.)
-            is_production = any(key in os.environ for key in ['RENDER', 'HEROKU', 'DYNO', 'RAILWAY_ENVIRONMENT'])
+            # Detect production environment (Render.com, Heroku, Hugging Face Spaces, etc.)
+            is_production = any(key in os.environ for key in ['RENDER', 'HEROKU', 'DYNO', 'RAILWAY_ENVIRONMENT', 'SPACE_ID'])
             if is_production:
                 self.logger.info("Production environment detected - forcing headless mode")
                 self.headless = True

@@ -1,0 +1,12 @@
+# Minimal packages for Hugging Face Spaces
+# Only essential packages for Chrome to work in containers
+
+wget
+unzip
+fonts-liberation
+libnss3
+libgconf-2-4
+libxss1
+libgbm1
+libxrandr2
+libgtk-3-0

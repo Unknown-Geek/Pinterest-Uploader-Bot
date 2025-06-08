@@ -95,7 +95,7 @@ def main():
     logger.info("🎯 Starting Pinterest Auto-Publisher (Enhanced Version)...")
     
     # Detect production environment
-    is_production = any(key in os.environ for key in ['RENDER', 'HEROKU', 'DYNO', 'RAILWAY_ENVIRONMENT'])
+    is_production = any(key in os.environ for key in ['RENDER', 'HEROKU', 'DYNO', 'RAILWAY_ENVIRONMENT', 'SPACE_ID'])
     if is_production:
         logger.info("Production environment detected")
     else:
