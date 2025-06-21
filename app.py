@@ -315,7 +315,8 @@ if __name__ == "__main__":
                 server_port=7861,
                 share=True,
                 show_error=True,
-                quiet=False
+                quiet=True,  # Reduce Gradio's own logging
+                enable_queue=False  # Disable queue system to reduce port activity
             )
         
     except Exception as e:
