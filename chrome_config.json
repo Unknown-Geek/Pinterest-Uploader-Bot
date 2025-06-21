@@ -1,0 +1,7 @@
+{
+  "chrome_binary": "chrome_portable/chrome",
+  "chromedriver_path": "drivers/chromedriver",
+  "version": "120.0.6099.109",
+  "platform": "linux",
+  "setup_date": "1750519797.1596873"
+}
