@@ -18,6 +18,8 @@ class PinterestAutomation:
         self.wait = None
         self.logger = logging.getLogger(__name__)
         self.fast_typing = fast_typing  # New configuration option
+        self.is_logged_in = False  # Track login state
+        self.current_email = None  # Track current logged in user
         
     def _setup_driver(self):
         """Setup Chrome WebDriver with optimized options"""
@@ -193,8 +195,24 @@ class PinterestAutomation:
             pass
     
     def login(self, email, password):
-        """Login to Pinterest with enhanced reliability"""
+        """Login to Pinterest with session management and enhanced reliability"""
         try:
+            # Check if already logged in with the same user
+            if self.is_logged_in and self.current_email == email:
+                self.logger.info(f"Already logged in as {email}, skipping login")
+                # Verify we're actually still logged in by checking current page
+                if self._verify_login_status():
+                    return True
+                else:
+                    self.logger.info("Login session expired, need to re-login")
+                    self.is_logged_in = False
+                    self.current_email = None
+            
+            # Check if logged in as different user
+            if self.is_logged_in and self.current_email != email:
+                self.logger.info(f"Logged in as different user ({self.current_email}), logging out first")
+                self._logout()
+            
             self.logger.info("Navigating to Pinterest login page...")
             self.driver.get("https://www.pinterest.com/login/")
             self._human_delay(3, 5)
@@ -202,13 +220,15 @@ class PinterestAutomation:
             # Wait for and fill email
             self.logger.info("Entering email...")
             email_field = self.wait.until(EC.element_to_be_clickable((By.ID, "email")))
-            self._type_like_human(email_field, email)
+            email_field.clear()
+            email_field.send_keys(email)
             self._human_delay()
             
             # Fill password
             self.logger.info("Entering password...")
             password_field = self.driver.find_element(By.ID, "password")
-            self._type_like_human(password_field, password)
+            password_field.clear()
+            password_field.send_keys(password)
             self._human_delay()
             
             # Click login button
@@ -222,13 +242,19 @@ class PinterestAutomation:
             # Check if login was successful
             if "/login/" not in self.driver.current_url:
                 self.logger.info("Login successful!")
+                self.is_logged_in = True
+                self.current_email = email
                 return True
             else:
                 self.logger.error("Login failed - still on login page")
+                self.is_logged_in = False
+                self.current_email = None
                 return False
                 
         except Exception as e:
             self.logger.error(f"Login error: {str(e)}")
+            self.is_logged_in = False
+            self.current_email = None
             return False
     
     def upload_image(self, image_path):
@@ -270,7 +296,8 @@ class PinterestAutomation:
                     return True
                     
             except Exception as e:
-                self.logger.warning(f"Direct upload method failed: {str(e)}")
+                # Note: Fallback methods available if direct upload fails
+                pass
                 return False
                 
         except Exception as e:
@@ -297,7 +324,17 @@ class PinterestAutomation:
                 try:
                     title_field = self.wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, selector)))
                     title_field.click()
-                    self._type_like_human(title_field, title)
+                    self._human_delay(0.5, 1)
+                    title_field.clear()
+                    title_field.send_keys(title)
+                    # Trigger React events for form validation
+                    self.driver.execute_script("""
+                        const element = arguments[0];
+                        const value = arguments[1];
+                        element.value = value;
+                        element.dispatchEvent(new Event('input', {bubbles: true}));
+                        element.dispatchEvent(new Event('change', {bubbles: true}));
+                    """, title_field, title)
                     self.logger.info(f"Title set using selector: {selector}")
                     return True
                 except:
@@ -355,65 +392,7 @@ class PinterestAutomation:
             self.logger.info(f"Setting description: {description}")
             self._human_delay(1, 2)
             
-            # Method 1: Enhanced Pinterest-specific description field interaction
-            try:
-                desc_field = self.wait.until(EC.element_to_be_clickable(
-                    (By.CSS_SELECTOR, "textarea[placeholder='Tell everyone what your Pin is about']")))
-                
-                # Focus the field first
-                desc_field.click()
-                self._human_delay(0.8, 1.2)
-                
-                # Clear any existing content with multiple methods
-                desc_field.send_keys(Keys.CONTROL + "a")
-                self._human_delay(0.2, 0.3)
-                desc_field.send_keys(Keys.DELETE)
-                self._human_delay(0.5, 0.8)
-                
-                # Type description character by character with deliberate timing
-                for char in description:
-                    desc_field.send_keys(char)
-                    time.sleep(random.uniform(0.08, 0.15))
-                
-                # Trigger React events to ensure Pinterest recognizes the input
-                self.driver.execute_script("""
-                    const element = arguments[0];
-                    const text = arguments[1];
-                    
-                    // Set value programmatically as backup
-                    element.value = text;
-                    
-                    // Trigger comprehensive event sequence for React
-                    const events = [
-                        'focus', 'keydown', 'keypress', 'input', 
-                        'keyup', 'change', 'blur'
-                    ];
-                    
-                    events.forEach(eventType => {
-                        const event = new Event(eventType, { 
-                            bubbles: true, 
-                            cancelable: true 
-                        });
-                        element.dispatchEvent(event);
-                    });
-                    
-                    // Additional React-specific triggers
-                    if (element._valueTracker) {
-                        element._valueTracker.setValue('');
-                    }
-                """, desc_field, description)
-                
-                # Additional validation steps
-                desc_field.send_keys(Keys.TAB)
-                desc_field.send_keys(Keys.SHIFT + Keys.TAB)
-                
-                self.logger.info("Description set using Pinterest-specific selector")
-                return True
-                
-            except Exception as e:
-                self.logger.warning(f"Pinterest-specific description selector failed: {str(e)}")
-            
-            # Method 2: Enhanced Draft.js editor interaction
+            # Method 1: Enhanced Draft.js editor interaction (most reliable)
             try:
                 desc_area = self.wait.until(EC.element_to_be_clickable(
                     (By.CSS_SELECTOR, ".public-DraftEditor-content")))
@@ -428,10 +407,8 @@ class PinterestAutomation:
                 desc_area.send_keys(Keys.DELETE)
                 self._human_delay(0.5, 0.8)
                 
-                # Type with deliberate pace for Draft.js
-                for char in description:
-                    desc_area.send_keys(char)
-                    time.sleep(random.uniform(0.08, 0.15))
+                # Set text directly instead of character-by-character
+                desc_area.send_keys(description)
                 
                 # Draft.js specific event firing
                 self.driver.execute_script("""
@@ -461,7 +438,8 @@ class PinterestAutomation:
                 return True
                 
             except Exception as e:
-                self.logger.warning(f"Draft.js editor method failed: {str(e)}")
+                # Reduced logging to avoid cluttering output - will try fallback methods
+                pass
             
             # Method 3: Comprehensive JavaScript approach
             try:
@@ -588,7 +566,15 @@ class PinterestAutomation:
                         desc_field.click()
                         self._human_delay(0.5, 0.8)
                         desc_field.clear()
-                        self._type_like_human(desc_field, description, (0.08, 0.15))
+                        desc_field.send_keys(description)
+                        # Trigger React events for form validation
+                        self.driver.execute_script("""
+                            const element = arguments[0];
+                            const value = arguments[1];
+                            element.value = value;
+                            element.dispatchEvent(new Event('input', {bubbles: true}));
+                            element.dispatchEvent(new Event('change', {bubbles: true}));
+                        """, desc_field, description)
                         self.logger.info(f"Description set using selector: {selector}")
                         return True
                 except:
@@ -645,7 +631,8 @@ class PinterestAutomation:
                 return True
                 
             except Exception as e:
-                self.logger.warning(f"Textarea contains link selector failed: {str(e)}")
+                # Fallback to other link methods available
+                pass
             
             # Method 2: Try dynamic Pinterest link field IDs (previous working method)
             try:
@@ -698,7 +685,8 @@ class PinterestAutomation:
                 return True
                 
             except Exception as e:
-                self.logger.warning(f"Dynamic Pinterest ID link selector failed: {str(e)}")
+                # Fallback methods will be attempted
+                pass
               # Method 3: Enhanced Pinterest-specific link field with placeholder
             try:
                 # Try the specific placeholder
@@ -718,7 +706,8 @@ class PinterestAutomation:
                 return True
                 
             except Exception as e:
-                self.logger.warning(f"Pinterest placeholder link selector failed: {str(e)}")
+                # Fallback methods will be attempted
+                pass
               # Method 4: Try common link selectors with enhanced React events
             selectors = [
                 "input[aria-label*='link' i]",
@@ -850,13 +839,11 @@ class PinterestAutomation:
             self.logger.info(f"Selecting board: {board_name}")
             self._human_delay(1, 2)
 
-            # Method 1: Use the new board-row data-test-id structure
+            # Method 1: JavaScript-based selection (most reliable)
             try:
-                # Click on board dropdown button using exact data-test-id
                 board_dropdown = self.wait.until(EC.element_to_be_clickable(
-                    (By.XPATH, '//button[@data-test-id="board-dropdown-select-button"]')))
+                    (By.CSS_SELECTOR, "[data-test-id='board-dropdown-select-button']")))
                 board_dropdown.click()
-                self.logger.info("Board dropdown clicked successfully")
                 self._human_delay(2, 3)
 
                 # Try the new board-row structure first
@@ -992,7 +979,8 @@ class PinterestAutomation:
                         pass
                 # End of parent clickable element fallback
             except Exception as e:
-                self.logger.warning(f"Board selection method failed: {str(e)}")
+                # Reduced logging to avoid cluttering output
+                pass
 
             # Method 4: JavaScript-based selection with board-row awareness
             try:
@@ -1199,6 +1187,8 @@ class PinterestAutomation:
             
             if success_check and success_check.get('success'):
                 self.logger.info("Pin appears to have been published successfully")
+                # Navigate back to pin-builder for next upload
+                self._navigate_to_pin_builder_for_next_upload()
                 return True
             else:
                 # Try waiting a bit longer and check again
@@ -1235,15 +1225,21 @@ class PinterestAutomation:
                 
                 if second_check and second_check.get('hasSuccess'):
                     self.logger.info("Pin published successfully on second verification")
+                    # Navigate back to pin-builder for next upload
+                    self._navigate_to_pin_builder_for_next_upload()
                     return True
                 else:
                     # Check if the page contains any success indicators in the raw text
                     body_text = second_check.get('bodyText', '') if second_check else ''
                     if 'you created a pin' in body_text or 'see your pin' in body_text or 'promote your pin' in body_text:
                         self.logger.info("Pin appears to be created based on page content")
+                        # Navigate back to pin-builder for next upload
+                        self._navigate_to_pin_builder_for_next_upload()
                         return True
                     else:
                         self.logger.warning("Could not verify pin publication success after multiple attempts")
+                        # Navigate back to pin-builder anyway for next upload
+                        self._navigate_to_pin_builder_for_next_upload()
                         # Return True if we can't verify but no clear errors - assume success
                         return True
                     
@@ -1704,3 +1700,69 @@ class PinterestAutomation:
         except Exception as e:
             self.logger.error(f"Error in publish click attempt: {str(e)}")
             return False
+    def _verify_login_status(self):
+        """Verify if user is still logged in"""
+        try:
+            # Try to go to a protected page to verify login
+            self.driver.get("https://www.pinterest.com/settings/")
+            self._human_delay(2, 3)
+            
+            # If we're redirected to login page, we're not logged in
+            if "/login/" in self.driver.current_url:
+                return False
+            
+            # Check for user-specific elements that indicate we're logged in
+            try:
+                # Look for profile/user elements
+                user_element = self.driver.find_element(By.CSS_SELECTOR, 
+                    "[data-test-id='header-accounts-options-button'], [aria-label*='account'], [aria-label*='profile']")
+                return True
+            except:
+                return False
+                
+        except Exception as e:
+            self.logger.debug(f"Login verification failed: {str(e)}")
+            return False
+    
+    def _logout(self):
+        """Logout from Pinterest"""
+        try:
+            self.logger.info("Logging out...")
+            # Try to access account menu and logout
+            try:
+                # Click on account menu
+                account_button = self.driver.find_element(By.CSS_SELECTOR, 
+                    "[data-test-id='header-accounts-options-button']")
+                account_button.click()
+                self._human_delay(1, 2)
+                
+                # Click logout
+                logout_button = self.driver.find_element(By.XPATH, "//div[contains(text(), 'Log out')]")
+                logout_button.click()
+                self._human_delay(2, 3)
+                
+            except Exception:
+                # Fallback: just clear cookies and go to logout URL
+                self.driver.delete_all_cookies()
+                self.driver.get("https://www.pinterest.com/logout/")
+                self._human_delay(2, 3)
+            
+            self.is_logged_in = False
+            self.current_email = None
+            self.logger.info("Logged out successfully")
+            
+        except Exception as e:
+            self.logger.warning(f"Logout failed: {str(e)}")
+            # Force reset session state
+            self.is_logged_in = False
+            self.current_email = None
+    
+    def _navigate_to_pin_builder_for_next_upload(self):
+        """Navigate back to pin-builder page for the next upload to maintain session state"""
+        try:
+            self.logger.info("Navigating back to pin-builder for next upload...")
+            self.driver.get("https://www.pinterest.com/pin-builder/")
+            self._human_delay(2, 3)
+            self.logger.info("Successfully navigated to pin-builder page")
+        except Exception as e:
+            self.logger.warning(f"Failed to navigate to pin-builder: {str(e)}")
